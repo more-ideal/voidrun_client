@@ -1,14 +1,19 @@
 import Phaser from 'phaser'
 import { TILE, COLS, ROWS } from '../constants'
 import { Player } from '../objects/Player'
+import { MapGenerator } from '../objects/MapGenerator'
+
+const PLAYER_START_GX = Math.floor(COLS / 2)
+const PLAYER_START_GY = 18
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
+  private mapGen!: MapGenerator
   private walls: Set<string> = new Set()
   private scoreText!: Phaser.GameObjects.Text
   private heightText!: Phaser.GameObjects.Text
   private score = 0
-  private startY = 0
+  private startPlayerY = 0
 
   constructor() {
     super('GameScene')
@@ -19,44 +24,41 @@ export class GameScene extends Phaser.Scene {
     this.score = 0
     this.walls = new Set()
 
+    // 세계 크기 설정 (세로로 매우 큰 공간)
+    this.cameras.main.setBounds(0, -99999, width, 99999 + height)
+
+    // 배경 (카메라 고정)
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810)
+      .setScrollFactor(0)
 
-    // 임시 경계 벽 (맵 생성 전까지)
-    this.buildBorderWalls()
+    // 맵 생성
+    this.mapGen = new MapGenerator(this, this.walls)
+    this.mapGen.init(PLAYER_START_GY)
 
-    // 플레이어 생성 (하단 중앙)
-    const startGX = Math.floor(COLS / 2)
-    const startGY = ROWS - 2
-    this.player = new Player(this, startGX, startGY)
-    this.startY = this.player.y
+    // 플레이어 생성
+    this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
+    this.startPlayerY = this.player.y
 
-    // 데스존
+    // 카메라가 플레이어 따라가게
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
+    this.cameras.main.setFollowOffset(0, height * 0.3)
+
+    // 데스존 (카메라 고정)
     this.createDeathZone(width, height)
 
-    // HUD
+    // HUD (카메라 고정)
     this.createHUD(width)
   }
 
-  private buildBorderWalls() {
-    for (let x = 0; x < COLS; x++) {
-      this.walls.add(`${x},-1`)  // 상단 경계
-    }
-    for (let y = 0; y < ROWS; y++) {
-      this.walls.add(`-1,${y}`)       // 좌측 경계
-      this.walls.add(`${COLS},${y}`)  // 우측 경계
-    }
-  }
-
   private createDeathZone(width: number, height: number) {
-    const dz = this.add.graphics()
-    dz.fillGradientStyle(0xff2255, 0xff2255, 0x440011, 0x440011, 0.0, 0.0, 0.95, 0.95)
+    const dz = this.add.graphics().setScrollFactor(0)
+    dz.fillGradientStyle(0x440011, 0x440011, 0xff2255, 0xff2255, 0.0, 0.0, 0.9, 0.9)
     dz.fillRect(0, height - 80, width, 80)
     dz.lineStyle(2, 0xff2255, 0.8)
     dz.lineBetween(0, height - 80, width, height - 80)
   }
 
   private createHUD(width: number) {
-    // SCORE 박스
     const sg = this.add.graphics().setScrollFactor(0)
     sg.fillStyle(0x0d1a2e, 0.85)
     sg.fillRect(8, 8, 120, 52)
@@ -71,7 +73,6 @@ export class GameScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
     }).setScrollFactor(0)
 
-    // HEIGHT 박스
     const hg = this.add.graphics().setScrollFactor(0)
     hg.fillStyle(0x0d1a2e, 0.85)
     hg.fillRect(width - 128, 8, 120, 52)
@@ -89,9 +90,9 @@ export class GameScene extends Phaser.Scene {
 
   update() {
     this.player.update(this.walls)
+    this.mapGen.update(this.player.gridY)
 
-    // 높이 계산 (위로 올라갈수록 증가)
-    const height = Math.max(0, Math.floor((this.startY - this.player.y) / TILE))
+    const height = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
     this.heightText.setText(height + 'm')
     this.scoreText.setText(String(this.score))
   }
