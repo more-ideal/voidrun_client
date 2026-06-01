@@ -2,6 +2,8 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
+export const SLIDE_SPEED_MIN = 30   // 최소 이동 시간(ms) — 낮을수록 빠름
+export const SLIDE_SPEED_PER_TILE = 9  // 타일당 추가 시간(ms) — 낮을수록 빠름
 
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
@@ -58,12 +60,8 @@ export class Player {
     else if (JustDown(this.cursors.down) || JustDown(this.wasd.down)) dy = 1
 
     if (dx !== 0 || dy !== 0) {
-      if (!this.isMoving) {
-        this.slide(dx, dy)
-      } else {
-        // 이동 중이면 다음 이동으로 큐에 저장
-        this.nextMove = { dx, dy }
-      }
+      if (!this.isMoving) this.slide(dx, dy)
+      else this.nextMove = { dx, dy }
     }
   }
 
@@ -72,11 +70,7 @@ export class Player {
     let ny = this.gridY + dy
     let steps = 0
 
-    while (
-      steps < MAX_SLIDE &&
-      nx >= 0 && nx < COLS &&
-      !this.walls.has(`${nx},${ny}`)
-    ) {
+    while (steps < MAX_SLIDE && nx >= 0 && nx < COLS && !this.walls.has(`${nx},${ny}`)) {
       nx += dx
       ny += dy
       steps++
@@ -96,7 +90,7 @@ export class Player {
     this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
 
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
-    const duration = Math.max(35, dist * 12)  // 속도 더 증가
+    const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
@@ -117,8 +111,6 @@ export class Player {
         this.gridY = ny
         this.isMoving = false
         this.currentTween = null
-
-        // 큐에 다음 이동이 있으면 즉시 실행
         if (this.nextMove) {
           const m = this.nextMove
           this.nextMove = null
@@ -130,11 +122,11 @@ export class Player {
 
   private createTrailAt(x: number, y: number) {
     const trail = this.scene.add.rectangle(x, y, TILE - 8, TILE - 8, 0x00e5cc)
-    trail.setAlpha(0.5).setDepth(9)
+    trail.setAlpha(0.45).setDepth(9)
     this.scene.tweens.add({
       targets: trail,
       alpha: 0,
-      duration: 260,
+      duration: 250,
       onComplete: () => trail.destroy()
     })
   }
@@ -148,9 +140,7 @@ export class Player {
         targets: p,
         x: wx + Math.cos(angle) * 14,
         y: wy + Math.sin(angle) * 14,
-        alpha: 0,
-        scaleX: 0,
-        scaleY: 0,
+        alpha: 0, scaleX: 0, scaleY: 0,
         duration: 180,
         ease: 'Quad.easeOut',
         onComplete: () => p.destroy()

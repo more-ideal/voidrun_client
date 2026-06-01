@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { MainScene } from './scenes/MainScene'
 import { GameScene } from './scenes/GameScene'
+import { GameOverScene } from './scenes/GameOverScene'
 import { SettingsScene } from './scenes/SettingsScene'
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -13,7 +14,7 @@ const config: Phaser.Types.Core.GameConfig = {
     width: 580,
     height: 720,
   },
-  scene: [MainScene, GameScene, SettingsScene],
+  scene: [MainScene, GameScene, GameOverScene, SettingsScene],
   physics: {
     default: 'arcade',
     arcade: { gravity: { x: 0, y: 0 }, debug: false }
