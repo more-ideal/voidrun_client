@@ -3,12 +3,13 @@ import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
 import { DeathZone } from '../objects/DeathZone'
+import { loadSettings } from '../config/Settings'
 
 const PLAYER_START_GX = Math.floor(COLS / 2)
 const PLAYER_START_GY = 18
-const MAP_W = COLS * TILE
-const PANEL_X = MAP_W + 10
-const PANEL_W = 100
+const MAP_W = COLS * TILE       // 480
+const PANEL_W = 200             // UI 패널 너비 2배
+const PANEL_X = MAP_W + PANEL_W / 2
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
@@ -21,18 +22,16 @@ export class GameScene extends Phaser.Scene {
   private startPlayerY = 0
   private isDead = false
 
-  constructor() {
-    super('GameScene')
-  }
+  constructor() { super('GameScene') }
 
   create() {
     const { width, height } = this.scale
+    const settings = loadSettings()
     this.score = 0
     this.isDead = false
     this.walls = new Set()
 
     this.cameras.main.setBounds(0, -99999, MAP_W, 99999 + height)
-
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
 
     // 맵 테두리
@@ -40,13 +39,19 @@ export class GameScene extends Phaser.Scene {
     border.lineStyle(1.5, 0x2a5080, 1)
     border.strokeRect(0, 0, MAP_W, height)
 
-    this.add.rectangle(MAP_W + 1, height / 2, 1, height, 0x1a3a5c)
-      .setScrollFactor(0).setDepth(20)
+    // 구분선
+    this.add.rectangle(MAP_W + 1, height / 2, 1, height, 0x1a3a5c).setScrollFactor(0).setDepth(20)
 
+    // 맵 생성
     this.mapGen = new MapGenerator(this, this.walls)
     this.mapGen.init(PLAYER_START_GY)
 
-    this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
+    // 플레이어 (설정에서 키 바인딩 + 잔상 불러오기)
+    this.player = new Player(
+      this, PLAYER_START_GX, PLAYER_START_GY,
+      settings.keyLeft, settings.keyRight, settings.keyUp, settings.keyDown,
+      settings.trailEffect
+    )
     this.startPlayerY = this.player.y
 
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
@@ -56,39 +61,63 @@ export class GameScene extends Phaser.Scene {
     this.deathZone = new DeathZone(this, dzStartY)
 
     this.createPanel(height)
+    this.createPauseBtn()
   }
 
   private createPanel(height: number) {
-    // 패널 배경
-    const bg = this.add.graphics().setScrollFactor(0).setDepth(20)
-    bg.fillStyle(0x0a0f1a, 1)
-    bg.fillRect(MAP_W, 0, PANEL_W, height)
+    // 패널 배경 없음 — 텍스트만
+    const cx = PANEL_X
 
-    const bx = MAP_W + PANEL_W / 2  // 박스 중앙 x
+    // SCORE
+    this.add.text(cx, 28, 'SCORE', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#7799aa'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
 
-    // SCORE 박스
-    this.drawPanelBox(bx, 50, 80, 60, 'SCORE')
-    this.scoreText = this.add.text(bx, 55, '0', {
-      fontSize: '20px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
+    this.scoreText = this.add.text(cx, 52, '0', {
+      fontSize: '26px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
 
-    // HEIGHT 박스
-    this.drawPanelBox(bx, 135, 80, 60, 'HEIGHT')
-    this.heightText = this.add.text(bx, 140, '0m', {
-      fontSize: '20px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
+    // 구분
+    const div = this.add.graphics().setScrollFactor(0).setDepth(21)
+    div.lineStyle(1, 0x1a3a5c, 0.6)
+    div.lineBetween(MAP_W + 16, 84, MAP_W + PANEL_W - 16, 84)
+
+    // HEIGHT
+    this.add.text(cx, 96, 'HEIGHT', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#7799aa'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+
+    this.heightText = this.add.text(cx, 120, '0m', {
+      fontSize: '26px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
   }
 
-  private drawPanelBox(x: number, y: number, w: number, h: number, label: string) {
-    const gfx = this.add.graphics().setScrollFactor(0).setDepth(21)
-    gfx.fillStyle(0x0d1a2e, 1)
-    gfx.fillRect(x - w / 2, y - h / 2, w, h)
-    gfx.lineStyle(1, 0x2a5080, 1)
-    gfx.strokeRect(x - w / 2, y - h / 2, w, h)
+  private createPauseBtn() {
+    const gfx = this.add.graphics().setScrollFactor(0).setDepth(22)
+    const bx = 22, by = 22, bw = 32, bh = 32
 
-    this.add.text(x, y - h / 2 + 10, label, {
-      fontSize: '9px', fontFamily: 'monospace', color: '#7799aa'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
+    const draw = (hover: boolean) => {
+      gfx.clear()
+      gfx.fillStyle(hover ? 0x1a3a5c : 0x0d1a2e, 0.9)
+      gfx.fillRect(bx - bw / 2, by - bh / 2, bw, bh)
+      gfx.lineStyle(1, hover ? 0x00e5cc : 0x2a5080, 1)
+      gfx.strokeRect(bx - bw / 2, by - bh / 2, bw, bh)
+    }
+    draw(false)
+
+    this.add.text(bx, by, '⏸', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#7799aa'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(23)
+
+    const zone = this.add.zone(bx, by, bw, bh).setScrollFactor(0).setDepth(24).setInteractive({ useHandCursor: true })
+    zone.on('pointerover', () => draw(true))
+    zone.on('pointerout', () => draw(false))
+    zone.on('pointerdown', () => {
+      if (!this.isDead) {
+        this.scene.launch('PauseScene')
+        this.scene.pause('GameScene')
+      }
+    })
   }
 
   update(_: number, delta: number) {
@@ -102,19 +131,12 @@ export class GameScene extends Phaser.Scene {
     this.heightText.setText(h + 'm')
     this.scoreText.setText(String(this.score))
 
-    // 데스존 충돌 감지
     if (this.deathZone.isKilled(this.player.y)) {
       this.isDead = true
-      this.triggerDeath(h)
+      this.cameras.main.flash(300, 255, 0, 50)
+      this.time.delayedCall(400, () => {
+        this.scene.start('GameOverScene', { score: this.score, height: h })
+      })
     }
-  }
-
-  private triggerDeath(height: number) {
-    // 플래시 효과
-    this.cameras.main.flash(300, 255, 0, 50)
-
-    this.time.delayedCall(400, () => {
-      this.scene.start('GameOverScene', { score: this.score, height })
-    })
   }
 }
