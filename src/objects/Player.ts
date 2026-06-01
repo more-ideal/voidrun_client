@@ -1,9 +1,10 @@
-import Phaser from 'phaser'
+﻿import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
 export const SLIDE_SPEED_MIN = 60
 export const SLIDE_SPEED_PER_TILE = 25
+export const GRADIENT_FADE_DURATION = 120  // 그라데이션 사라지는 시간(ms)
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
@@ -90,7 +91,7 @@ export class Player {
     const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
     if (this.trailEffect === 'gradient') {
-      if (this.gradientGfx) { this.gradientGfx.destroy(); this.gradientGfx = null }
+      if (this.gradientGfx) { const _old = this.gradientGfx; this.gradientGfx = null; this.scene.tweens.add({ targets: _old, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => _old.destroy() }) }
       this.gradientGfx = this.scene.add.graphics().setDepth(9)
     }
 
@@ -100,7 +101,7 @@ export class Player {
       targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
-      duration,
+      duration: 80,
       ease: 'Quad.easeOut',
       onUpdate: () => {
         if (this.trailEffect === 'gradient' && this.gradientGfx) {
@@ -119,7 +120,7 @@ export class Player {
         this.isMoving = false; this.currentTween = null
         if (this.gradientGfx) {
           const g = this.gradientGfx; this.gradientGfx = null
-          this.scene.tweens.add({ targets: g, alpha: 0, duration: 280, onComplete: () => g.destroy() })
+          this.scene.tweens.add({ targets: g, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => g.destroy() })
         }
         if (this.nextMove) {
           const m = this.nextMove; this.nextMove = null
@@ -129,8 +130,7 @@ export class Player {
     })
   }
 
-  // 실시간 그라데이션: 출발지(뒤) 투명 → 현재 위치(캐릭터/앞) 진
-  private drawLiveGradient(
+  // ?ㅼ떆媛?洹몃씪?곗씠?? 異쒕컻吏(?? ?щ챸 ???꾩옱 ?꾩튂(罹먮┃???? 吏?  private drawLiveGradient(
     gfx: Phaser.GameObjects.Graphics,
     sx: number, sy: number,
     cx: number, cy: number,
@@ -143,22 +143,18 @@ export class Player {
       const x1 = Math.min(sx, cx) - W / 2
       const w = Math.abs(cx - sx) + W
       if (dx > 0) {
-        // 오른쪽: 왼쪽(뒤) 투명 → 오른쪽(앞) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.7, 0, 0.7)
+        // ?ㅻⅨ履? ?쇱そ(?? ?щ챸 ???ㅻⅨ履??? 吏?        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.7, 0, 0.7)
       } else {
-        // 왼쪽: 오른쪽(뒤) 투명 → 왼쪽(앞) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0, 0.7, 0)
+        // ?쇱そ: ?ㅻⅨ履??? ?щ챸 ???쇱そ(?? 吏?        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0, 0.7, 0)
       }
       gfx.fillRect(x1, sy - W / 2, w, W)
     } else {
       const y1 = Math.min(sy, cy) - W / 2
       const h = Math.abs(cy - sy) + W
       if (dy < 0) {
-        // 위로: 아래(뒤) 투명 → 위(앞) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0.7, 0, 0)
+        // ?꾨줈: ?꾨옒(?? ?щ챸 ?????? 吏?        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0.7, 0, 0)
       } else {
-        // 아래로: 위(뒤) 투명 → 아래(앞) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.7, 0.7)
+        // ?꾨옒濡? ???? ?щ챸 ???꾨옒(?? 吏?        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.7, 0.7)
       }
       gfx.fillRect(sx - W / 2, y1, W, h)
     }
