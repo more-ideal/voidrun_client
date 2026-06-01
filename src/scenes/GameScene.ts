@@ -4,20 +4,17 @@ import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
 import { DeathZone } from '../objects/DeathZone'
 import { loadSettings } from '../config/Settings'
+import { showGameUI, hideGameUI, updateScore, updateHeight } from '../config/DomUI'
 
 const PLAYER_START_GX = Math.floor(COLS / 2)
 const PLAYER_START_GY = 18
-const MAP_W = COLS * TILE       // 480
-const PANEL_W = 200             // UI 패널 너비 2배
-const PANEL_X = MAP_W + PANEL_W / 2
+const MAP_W = COLS * TILE
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
   private mapGen!: MapGenerator
   private deathZone!: DeathZone
   private walls: Set<string> = new Set()
-  private scoreText!: Phaser.GameObjects.Text
-  private heightText!: Phaser.GameObjects.Text
   private score = 0
   private startPlayerY = 0
   private isDead = false
@@ -32,6 +29,7 @@ export class GameScene extends Phaser.Scene {
     this.walls = new Set()
 
     this.cameras.main.setBounds(0, -99999, MAP_W, 99999 + height)
+
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
 
     // 맵 테두리
@@ -39,14 +37,9 @@ export class GameScene extends Phaser.Scene {
     border.lineStyle(1.5, 0x2a5080, 1)
     border.strokeRect(0, 0, MAP_W, height)
 
-    // 구분선
-    this.add.rectangle(MAP_W + 1, height / 2, 1, height, 0x1a3a5c).setScrollFactor(0).setDepth(20)
-
-    // 맵 생성
     this.mapGen = new MapGenerator(this, this.walls)
     this.mapGen.init(PLAYER_START_GY)
 
-    // 플레이어 (설정에서 키 바인딩 + 잔상 불러오기)
     this.player = new Player(
       this, PLAYER_START_GX, PLAYER_START_GY,
       settings.keyLeft, settings.keyRight, settings.keyUp, settings.keyDown,
@@ -60,36 +53,12 @@ export class GameScene extends Phaser.Scene {
     const dzStartY = (PLAYER_START_GY + 8) * TILE
     this.deathZone = new DeathZone(this, dzStartY)
 
-    this.createPanel(height)
     this.createPauseBtn()
-  }
 
-  private createPanel(height: number) {
-    // 패널 배경 없음 — 텍스트만
-    const cx = PANEL_X
-
-    // SCORE
-    this.add.text(cx, 28, 'SCORE', {
-      fontSize: '11px', fontFamily: 'monospace', color: '#7799aa'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
-
-    this.scoreText = this.add.text(cx, 52, '0', {
-      fontSize: '26px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
-
-    // 구분
-    const div = this.add.graphics().setScrollFactor(0).setDepth(21)
-    div.lineStyle(1, 0x1a3a5c, 0.6)
-    div.lineBetween(MAP_W + 16, 84, MAP_W + PANEL_W - 16, 84)
-
-    // HEIGHT
-    this.add.text(cx, 96, 'HEIGHT', {
-      fontSize: '11px', fontFamily: 'monospace', color: '#7799aa'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
-
-    this.heightText = this.add.text(cx, 120, '0m', {
-      fontSize: '26px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+    // DOM UI 표시
+    showGameUI()
+    updateScore(0)
+    updateHeight(0)
   }
 
   private createPauseBtn() {
@@ -118,6 +87,18 @@ export class GameScene extends Phaser.Scene {
         this.scene.pause('GameScene')
       }
     })
+
+    // ESC로도 일시정지
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (!this.isDead) {
+        this.scene.launch('PauseScene')
+        this.scene.pause('GameScene')
+      }
+    })
+  }
+
+  shutdown() {
+    hideGameUI()
   }
 
   update(_: number, delta: number) {
@@ -128,13 +109,14 @@ export class GameScene extends Phaser.Scene {
     this.deathZone.update(delta)
 
     const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
-    this.heightText.setText(h + 'm')
-    this.scoreText.setText(String(this.score))
+    updateScore(this.score)
+    updateHeight(h)
 
     if (this.deathZone.isKilled(this.player.y)) {
       this.isDead = true
       this.cameras.main.flash(300, 255, 0, 50)
       this.time.delayedCall(400, () => {
+        hideGameUI()
         this.scene.start('GameOverScene', { score: this.score, height: h })
       })
     }

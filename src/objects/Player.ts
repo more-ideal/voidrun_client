@@ -7,13 +7,11 @@ export const SLIDE_SPEED_PER_TILE = 9
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
-// 그라데이션 잔상용 색상 팔레트 (냥캣 느낌)
 const GRADIENT_COLORS = [0xff6ec7, 0xffb347, 0xffff66, 0x66ff66, 0x66cfff, 0xb366ff]
 
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
   private scene: Phaser.Scene
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private customKeys!: {
     left: Phaser.Input.Keyboard.Key
     right: Phaser.Input.Keyboard.Key
@@ -24,7 +22,7 @@ export class Player {
   private nextMove: { dx: number, dy: number } | null = null
   private walls: Set<string> = new Set()
   private lastTrailPos = { x: 0, y: 0 }
-  private trailIndex = 0
+  private trailColorIdx = 0
   private isMoving = false
   trailEffect: TrailEffect = 'box'
 
@@ -34,7 +32,8 @@ export class Player {
   get x() { return this.rect.x }
   get y() { return this.rect.y }
 
-  constructor(scene: Phaser.Scene, gridX: number, gridY: number,
+  constructor(
+    scene: Phaser.Scene, gridX: number, gridY: number,
     keyLeft = 37, keyRight = 39, keyUp = 38, keyDown = 40,
     trailEffect: TrailEffect = 'box'
   ) {
@@ -48,7 +47,6 @@ export class Player {
       TILE - 6, TILE - 6, 0x00e5cc
     ).setDepth(10)
 
-    this.cursors = scene.input.keyboard!.createCursorKeys()
     this.customKeys = {
       left: scene.input.keyboard!.addKey(keyLeft),
       right: scene.input.keyboard!.addKey(keyRight),
@@ -93,6 +91,15 @@ export class Player {
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
     const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
+    // 그라데이션은 이동 시작 시 경로 전체를 한 번에 그림
+    if (this.trailEffect === 'gradient') {
+      this.spawnGradientTail(
+        this.rect.x, this.rect.y,
+        nx * TILE + TILE / 2, ny * TILE + TILE / 2,
+        dx, dy
+      )
+    }
+
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
       x: nx * TILE + TILE / 2,
@@ -100,10 +107,11 @@ export class Player {
       duration,
       ease: 'Quad.easeOut',
       onUpdate: () => {
+        if (this.trailEffect === 'gradient') return  // gradient는 위에서 처리
         const ddx = this.rect.x - this.lastTrailPos.x
         const ddy = this.rect.y - this.lastTrailPos.y
         if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.3) {
-          this.spawnTrail(this.lastTrailPos.x, this.lastTrailPos.y)
+          this.spawnTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
           this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
         }
       },
@@ -118,10 +126,9 @@ export class Player {
     })
   }
 
-  private spawnTrail(x: number, y: number) {
+  private spawnTrailAt(x: number, y: number) {
     switch (this.trailEffect) {
-      case 'box': this.trailBox(x, y); break
-      case 'gradient': this.trailGradient(x, y); break
+      case 'box':   this.trailBox(x, y); break
       case 'spark': this.trailSpark(x, y); break
       case 'ghost': this.trailGhost(x, y); break
     }
@@ -133,42 +140,58 @@ export class Player {
     this.scene.tweens.add({ targets: t, alpha: 0, duration: 260, onComplete: () => t.destroy() })
   }
 
-  // 2. 그라데이션 잔상 (냥캣 느낌 - 무지개 색 순환)
-  private trailGradient(x: number, y: number) {
-    const color = GRADIENT_COLORS[this.trailIndex % GRADIENT_COLORS.length]
-    this.trailIndex++
-    const t = this.scene.add.rectangle(x, y, TILE - 6, TILE - 6, color).setAlpha(0.6).setDepth(9)
-    this.scene.tweens.add({
-      targets: t, alpha: 0, scaleX: 0.6, scaleY: 0.6,
-      duration: 320, ease: 'Quad.easeOut',
-      onComplete: () => t.destroy()
-    })
+  // 2. 그라데이션 잔상 — 이동 경로 전체를 방향에 따라 그라데이션으로
+  private spawnGradientTail(sx: number, sy: number, ex: number, ey: number, dx: number, dy: number) {
+    const gfx = this.scene.add.graphics().setDepth(9)
+    const W = TILE - 6
+
+    if (dx !== 0) {
+      const x1 = Math.min(sx, ex) - W / 2
+      const w = Math.abs(ex - sx) + W
+      // 이동 뒤(출발지)가 진하고 앞(목적지)이 투명
+      if (dx > 0) {
+        // 오른쪽 이동: 왼쪽 진, 오른쪽 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0, 0.65, 0)
+      } else {
+        // 왼쪽 이동: 오른쪽 진, 왼쪽 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.65, 0, 0.65)
+      }
+      gfx.fillRect(x1, sy - W / 2, w, W)
+    } else {
+      const y1 = Math.min(sy, ey) - W / 2
+      const h = Math.abs(ey - sy) + W
+      // 위로 이동: 아래(출발지) 진, 위(목적지) 투명
+      if (dy < 0) {
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.65, 0.65)
+      } else {
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0.65, 0, 0)
+      }
+      gfx.fillRect(sx - W / 2, y1, W, h)
+    }
+
+    this.scene.tweens.add({ targets: gfx, alpha: 0, duration: 450, onComplete: () => gfx.destroy() })
   }
 
-  // 3. 스파크 잔상 (작은 파티클들이 퍼짐)
+  // 3. 스파크 잔상
   private trailSpark(x: number, y: number) {
     for (let i = 0; i < 4; i++) {
       const angle = Math.random() * Math.PI * 2
-      const dist = 4 + Math.random() * 8
+      const d = 4 + Math.random() * 8
       const p = this.scene.add.rectangle(x, y, 4, 4, 0x00e5cc).setAlpha(0.7).setDepth(9)
       this.scene.tweens.add({
-        targets: p,
-        x: x + Math.cos(angle) * dist,
-        y: y + Math.sin(angle) * dist,
-        alpha: 0, scaleX: 0, scaleY: 0,
-        duration: 200 + Math.random() * 100,
+        targets: p, x: x + Math.cos(angle) * d, y: y + Math.sin(angle) * d,
+        alpha: 0, scaleX: 0, scaleY: 0, duration: 200 + Math.random() * 100,
         onComplete: () => p.destroy()
       })
     }
   }
 
-  // 4. 고스트 잔상 (큰 실루엣이 천천히 사라짐)
+  // 4. 고스트 잔상
   private trailGhost(x: number, y: number) {
-    const t = this.scene.add.rectangle(x, y, TILE - 2, TILE - 2, 0x00e5cc).setAlpha(0.25).setDepth(8)
+    const t = this.scene.add.rectangle(x, y, TILE - 2, TILE - 2, 0x00e5cc).setAlpha(0.22).setDepth(8)
     this.scene.tweens.add({
       targets: t, alpha: 0, scaleX: 1.4, scaleY: 1.4,
-      duration: 450, ease: 'Quad.easeOut',
-      onComplete: () => t.destroy()
+      duration: 450, ease: 'Quad.easeOut', onComplete: () => t.destroy()
     })
   }
 
@@ -179,8 +202,7 @@ export class Player {
       this.scene.tweens.add({
         targets: p,
         x: wx + Math.cos(angle) * 14, y: wy + Math.sin(angle) * 14,
-        alpha: 0, scaleX: 0, scaleY: 0,
-        duration: 180, ease: 'Quad.easeOut',
+        alpha: 0, scaleX: 0, scaleY: 0, duration: 180, ease: 'Quad.easeOut',
         onComplete: () => p.destroy()
       })
     }

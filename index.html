@@ -1,16 +1,84 @@
 <!DOCTYPE html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VOIDRUN</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-    </style>
-  </head>
-  <body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOIDRUN</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #111318;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #wrapper {
+      display: flex;
+      align-items: stretch;
+      position: relative;
+    }
+
+    #game canvas { display: block; }
+
+    #ui-panel {
+      width: 160px;
+      background: #0a0f1a;
+      border-left: 1px solid #1a3a5c;
+      padding: 24px 18px;
+      display: none;   /* 게임 중에만 표시 */
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #ui-panel.visible { display: flex; }
+
+    .ui-label {
+      font-family: monospace;
+      font-size: 11px;
+      color: #7799aa;
+      letter-spacing: 2px;
+    }
+
+    .ui-value {
+      font-family: monospace;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    #ui-score  { color: #00e5cc; }
+    #ui-height { color: #f5a623; }
+
+    .ui-divider {
+      height: 1px;
+      background: #1a3a5c;
+      margin: 10px 0;
+    }
+
+    #ui-pause-hint {
+      margin-top: auto;
+      font-family: monospace;
+      font-size: 10px;
+      color: #334455;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrapper">
     <div id="game"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+    <div id="ui-panel">
+      <div class="ui-label">SCORE</div>
+      <div class="ui-value" id="ui-score">0</div>
+      <div class="ui-divider"></div>
+      <div class="ui-label">HEIGHT</div>
+      <div class="ui-value" id="ui-height">0m</div>
+      <div id="ui-pause-hint">ESC · pause</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
 </html>
