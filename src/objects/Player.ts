@@ -2,9 +2,9 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
-export const SLIDE_SPEED_MIN = 60
-export const SLIDE_SPEED_PER_TILE = 25
-export const GRADIENT_FADE_DURATION = 120
+export const SLIDE_SPEED_MIN = 50
+export const SLIDE_SPEED_PER_TILE = 5
+export const GRADIENT_FADE_DURATION = 200
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
