@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
+const MAX_SLIDE = 20  // 최대 슬라이딩 거리 제한
+
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
   private scene: Phaser.Scene
@@ -27,8 +29,7 @@ export class Player {
     const px = gridX * TILE + TILE / 2
     const py = gridY * TILE + TILE / 2
 
-    // 네모 캐릭터 직접 생성
-    this.rect = scene.add.rectangle(px, py, TILE - 8, TILE - 8, 0x00e5cc)
+    this.rect = scene.add.rectangle(px, py, TILE - 4, TILE - 4, 0x00e5cc)
     this.rect.setDepth(10)
 
     this.cursors = scene.input.keyboard!.createCursorKeys()
@@ -57,10 +58,16 @@ export class Player {
   private slide(dx: number, dy: number, walls: Set<string>) {
     let nx = this.gridX + dx
     let ny = this.gridY + dy
+    let steps = 0
 
-    while (nx >= 0 && nx < COLS && !walls.has(`${nx},${ny}`)) {
+    while (
+      steps < MAX_SLIDE &&
+      nx >= 0 && nx < COLS &&
+      !walls.has(`${nx},${ny}`)
+    ) {
       nx += dx
       ny += dy
+      steps++
     }
     nx -= dx
     ny -= dy
@@ -76,7 +83,7 @@ export class Player {
       targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
-      duration: Math.max(80, dist * 35),
+      duration: Math.max(80, dist * 30),
       ease: 'Quad.easeOut',
       onComplete: () => {
         this.gridX = nx
@@ -91,28 +98,26 @@ export class Player {
       Math.abs(targetGX - this.gridX),
       Math.abs(targetGY - this.gridY)
     )
-    if (steps === 0) return
+    if (steps <= 1) return
     const dx = (targetGX - this.gridX) / steps
     const dy = (targetGY - this.gridY) / steps
 
     for (let i = 1; i < steps; i++) {
       const tx = (this.gridX + dx * i) * TILE + TILE / 2
       const ty = (this.gridY + dy * i) * TILE + TILE / 2
-      const alpha = Math.max(0.05, 0.3 - i * 0.03)
+      const alpha = Math.max(0.05, 0.28 - i * 0.03)
 
-      const trail = this.scene.add.rectangle(tx, ty, TILE - 14, TILE - 14, 0x00e5cc)
-      trail.setAlpha(alpha)
-      trail.setDepth(9)
+      const trail = this.scene.add.rectangle(tx, ty, TILE - 8, TILE - 8, 0x00e5cc)
+      trail.setAlpha(alpha).setDepth(9)
 
       this.scene.tweens.add({
         targets: trail,
         alpha: 0,
-        duration: 180,
+        duration: 160,
         onComplete: () => trail.destroy()
       })
     }
   }
 
-  // 카메라 follow용 getter
   getRect() { return this.rect }
 }
