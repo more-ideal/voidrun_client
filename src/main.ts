@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+import Phaser from 'phaser' 
 import { MainScene } from './scenes/MainScene'
 import { GameScene } from './scenes/GameScene'
 import { SettingsScene } from './scenes/SettingsScene'

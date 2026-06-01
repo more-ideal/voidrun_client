@@ -1,8 +1,9 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
-export class Player extends Phaser.GameObjects.Container {
-  private body!: Phaser.GameObjects.Rectangle
+export class Player {
+  private rect: Phaser.GameObjects.Rectangle
+  private scene: Phaser.Scene
   private isMoving = false
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: {
@@ -15,18 +16,20 @@ export class Player extends Phaser.GameObjects.Container {
   gridX: number
   gridY: number
 
-  constructor(scene: Phaser.Scene, gridX: number, gridY: number) {
-    const px = gridX * TILE + TILE / 2
-    const py = gridY * TILE + TILE / 2
-    super(scene, px, py)
+  get x() { return this.rect.x }
+  get y() { return this.rect.y }
 
+  constructor(scene: Phaser.Scene, gridX: number, gridY: number) {
+    this.scene = scene
     this.gridX = gridX
     this.gridY = gridY
 
-    // 네모 캐릭터
-    this.body = scene.add.rectangle(0, 0, TILE - 8, TILE - 8, 0x00e5cc)
-    this.add(this.body)
-    scene.add.existing(this)
+    const px = gridX * TILE + TILE / 2
+    const py = gridY * TILE + TILE / 2
+
+    // 네모 캐릭터 직접 생성
+    this.rect = scene.add.rectangle(px, py, TILE - 8, TILE - 8, 0x00e5cc)
+    this.rect.setDepth(10)
 
     this.cursors = scene.input.keyboard!.createCursorKeys()
     this.wasd = {
@@ -55,7 +58,7 @@ export class Player extends Phaser.GameObjects.Container {
     let nx = this.gridX + dx
     let ny = this.gridY + dy
 
-    while (nx >= 0 && nx < COLS && ny >= 0 && !walls.has(`${nx},${ny}`)) {
+    while (nx >= 0 && nx < COLS && !walls.has(`${nx},${ny}`)) {
       nx += dx
       ny += dy
     }
@@ -70,7 +73,7 @@ export class Player extends Phaser.GameObjects.Container {
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
 
     this.scene.tweens.add({
-      targets: this,
+      targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
       duration: Math.max(80, dist * 35),
@@ -88,16 +91,18 @@ export class Player extends Phaser.GameObjects.Container {
       Math.abs(targetGX - this.gridX),
       Math.abs(targetGY - this.gridY)
     )
+    if (steps === 0) return
     const dx = (targetGX - this.gridX) / steps
     const dy = (targetGY - this.gridY) / steps
 
     for (let i = 1; i < steps; i++) {
       const tx = (this.gridX + dx * i) * TILE + TILE / 2
       const ty = (this.gridY + dy * i) * TILE + TILE / 2
-      const alpha = Math.max(0.05, 0.35 - i * 0.04)
+      const alpha = Math.max(0.05, 0.3 - i * 0.03)
 
-      const trail = this.scene.add.rectangle(tx, ty, TILE - 12, TILE - 12, 0x00e5cc)
+      const trail = this.scene.add.rectangle(tx, ty, TILE - 14, TILE - 14, 0x00e5cc)
       trail.setAlpha(alpha)
+      trail.setDepth(9)
 
       this.scene.tweens.add({
         targets: trail,
@@ -107,4 +112,7 @@ export class Player extends Phaser.GameObjects.Container {
       })
     }
   }
+
+  // 카메라 follow용 getter
+  getRect() { return this.rect }
 }

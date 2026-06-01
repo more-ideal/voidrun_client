@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { TILE, COLS, ROWS } from '../constants'
+import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
 
@@ -24,29 +24,22 @@ export class GameScene extends Phaser.Scene {
     this.score = 0
     this.walls = new Set()
 
-    // 세계 크기 설정 (세로로 매우 큰 공간)
     this.cameras.main.setBounds(0, -99999, width, 99999 + height)
 
-    // 배경 (카메라 고정)
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810)
       .setScrollFactor(0)
 
-    // 맵 생성
     this.mapGen = new MapGenerator(this, this.walls)
     this.mapGen.init(PLAYER_START_GY)
 
-    // 플레이어 생성
     this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
     this.startPlayerY = this.player.y
 
-    // 카메라가 플레이어 따라가게
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
-    this.cameras.main.setFollowOffset(0, height * 0.3)
+    // 카메라가 플레이어 rect 따라가게
+    this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
+    this.cameras.main.setFollowOffset(0, height * 0.25)
 
-    // 데스존 (카메라 고정)
     this.createDeathZone(width, height)
-
-    // HUD (카메라 고정)
     this.createHUD(width)
   }
 
@@ -92,8 +85,8 @@ export class GameScene extends Phaser.Scene {
     this.player.update(this.walls)
     this.mapGen.update(this.player.gridY)
 
-    const height = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
-    this.heightText.setText(height + 'm')
+    const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
+    this.heightText.setText(h + 'm')
     this.scoreText.setText(String(this.score))
   }
 }
