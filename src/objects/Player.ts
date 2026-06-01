@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
-const MAX_SLIDE = 20  // 최대 슬라이딩 거리 제한
+const MAX_SLIDE = 30
 
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
@@ -26,10 +26,12 @@ export class Player {
     this.gridX = gridX
     this.gridY = gridY
 
-    const px = gridX * TILE + TILE / 2
-    const py = gridY * TILE + TILE / 2
-
-    this.rect = scene.add.rectangle(px, py, TILE - 4, TILE - 4, 0x00e5cc)
+    this.rect = scene.add.rectangle(
+      gridX * TILE + TILE / 2,
+      gridY * TILE + TILE / 2,
+      TILE - 6, TILE - 6,
+      0x00e5cc
+    )
     this.rect.setDepth(10)
 
     this.cursors = scene.input.keyboard!.createCursorKeys()
@@ -72,9 +74,18 @@ export class Player {
     nx -= dx
     ny -= dy
 
-    if (nx === this.gridX && ny === this.gridY) return
+    // 제자리 = 벽에 바로 붙어있는 경우 → 충돌 이펙트만
+    if (nx === this.gridX && ny === this.gridY) {
+      this.spawnHitEffect(
+        (this.gridX + dx) * TILE + TILE / 2,
+        (this.gridY + dy) * TILE + TILE / 2
+      )
+      return
+    }
 
     this.isMoving = true
+
+    // 잔상: 지나온 모든 타일에 남기기
     this.spawnTrails(nx, ny)
 
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
@@ -83,12 +94,14 @@ export class Player {
       targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
-      duration: Math.max(80, dist * 30),
+      duration: Math.max(70, dist * 28),
       ease: 'Quad.easeOut',
       onComplete: () => {
         this.gridX = nx
         this.gridY = ny
         this.isMoving = false
+        // 도착 시 작은 충돌 이펙트
+        this.spawnHitEffect(this.rect.x, this.rect.y, true)
       }
     })
   }
@@ -98,14 +111,16 @@ export class Player {
       Math.abs(targetGX - this.gridX),
       Math.abs(targetGY - this.gridY)
     )
-    if (steps <= 1) return
+    if (steps <= 0) return
+
     const dx = (targetGX - this.gridX) / steps
     const dy = (targetGY - this.gridY) / steps
 
-    for (let i = 1; i < steps; i++) {
+    // 출발지부터 도착지 직전까지 잔상
+    for (let i = 0; i < steps; i++) {
       const tx = (this.gridX + dx * i) * TILE + TILE / 2
       const ty = (this.gridY + dy * i) * TILE + TILE / 2
-      const alpha = Math.max(0.05, 0.28 - i * 0.03)
+      const alpha = 0.55 - (i / steps) * 0.45
 
       const trail = this.scene.add.rectangle(tx, ty, TILE - 8, TILE - 8, 0x00e5cc)
       trail.setAlpha(alpha).setDepth(9)
@@ -113,8 +128,43 @@ export class Player {
       this.scene.tweens.add({
         targets: trail,
         alpha: 0,
-        duration: 160,
+        duration: 350,
+        delay: i * 15,
         onComplete: () => trail.destroy()
+      })
+    }
+  }
+
+  private spawnHitEffect(wx: number, wy: number, soft = false) {
+    const count = soft ? 3 : 6
+    const spread = soft ? 8 : 16
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2
+      const p = this.scene.add.rectangle(wx, wy, 5, 5, 0x00e5cc)
+      p.setDepth(11)
+
+      this.scene.tweens.add({
+        targets: p,
+        x: wx + Math.cos(angle) * spread,
+        y: wy + Math.sin(angle) * spread,
+        alpha: 0,
+        scaleX: 0,
+        scaleY: 0,
+        duration: soft ? 150 : 220,
+        ease: 'Quad.easeOut',
+        onComplete: () => p.destroy()
+      })
+    }
+
+    // 캐릭터 flash
+    if (!soft) {
+      this.scene.tweens.add({
+        targets: this.rect,
+        alpha: 0.2,
+        yoyo: true,
+        duration: 70,
+        repeat: 1,
       })
     }
   }

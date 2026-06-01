@@ -1,97 +1,103 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
-export const CHUNK_HEIGHT = 12
+const TEST_PATTERN: number[][] = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+]
+
+export const PATTERN_HEIGHT = TEST_PATTERN.length
 
 export class MapGenerator {
   private scene: Phaser.Scene
   private walls: Set<string>
-  private chunks: { startRow: number; tiles: Phaser.GameObjects.Rectangle[] }[] = []
+  private tiles: Map<string, Phaser.GameObjects.Rectangle> = new Map()
+  private generatedChunks: Set<number> = new Set()
 
   constructor(scene: Phaser.Scene, walls: Set<string>) {
     this.scene = scene
     this.walls = walls
   }
 
-  init(startRow: number) {
-    // 초기 청크 충분히 생성
-    for (let i = 0; i < 8; i++) {
-      this.generateChunk(startRow - CHUNK_HEIGHT * i)
+  init(playerStartRow: number) {
+    // 시작 위치 기준 충분히 위까지 생성
+    const startChunk = Math.ceil(playerStartRow / PATTERN_HEIGHT)
+    for (let i = -1; i <= startChunk + 6; i++) {
+      this.generateChunk(i)
     }
   }
 
-  generateChunk(startRow: number) {
-    const tiles: Phaser.GameObjects.Rectangle[] = []
+  generateChunk(chunkIndex: number) {
+    if (this.generatedChunks.has(chunkIndex)) return
+    this.generatedChunks.add(chunkIndex)
 
-    for (let row = startRow; row > startRow - CHUNK_HEIGHT; row--) {
-      const wallCols = this.generateRow(row, startRow)
+    const chunkBottomRow = chunkIndex * PATTERN_HEIGHT
 
-      wallCols.forEach(col => {
-        const tile = this.scene.add.rectangle(
-          col * TILE + TILE / 2,
-          row * TILE + TILE / 2,
-          TILE - 2,
-          TILE - 2,
-          0x0d2040
-        )
-        tile.setStrokeStyle(1, 0x1a4060, 1)
-        tile.setDepth(1)
-        tiles.push(tile)
-        this.walls.add(`${col},${row}`)
-      })
-    }
+    for (let r = 0; r < PATTERN_HEIGHT; r++) {
+      const worldRow = chunkBottomRow - r
 
-    this.chunks.push({ startRow, tiles })
-  }
+      // 좌우 경계 벽
+      this.walls.add(`-1,${worldRow}`)
+      this.walls.add(`${COLS},${worldRow}`)
 
-  private generateRow(row: number, chunkStartRow: number): number[] {
-    const wallCols: number[] = []
-
-    // 좌우 경계 벽
-    for (let y = row - 5; y <= row + 5; y++) {
-      this.walls.add(`-1,${y}`)
-      this.walls.add(`${COLS},${y}`)
-    }
-
-    // 청크 시작 2행은 비워서 연결 통로 확보
-    if (row > chunkStartRow - 2) return wallCols
-
-    // 내부 벽 랜덤 배치 (최대 35%, 최소 빈칸 4개 보장)
-    let wallCount = 0
-    const maxWalls = Math.floor(COLS * 0.35)
-
-    for (let col = 0; col < COLS; col++) {
-      if (wallCount < maxWalls && Math.random() < 0.28) {
-        wallCols.push(col)
-        wallCount++
+      for (let c = 0; c < TEST_PATTERN[r].length && c < COLS; c++) {
+        if (TEST_PATTERN[r][c] === 1) {
+          const key = `${c},${worldRow}`
+          if (!this.tiles.has(key)) {
+            const tile = this.scene.add.rectangle(
+              c * TILE + TILE / 2,
+              worldRow * TILE + TILE / 2,
+              TILE - 2,
+              TILE - 2,
+              0x0d2040
+            )
+            tile.setStrokeStyle(1, 0x1a4060, 1)
+            tile.setDepth(1)
+            this.tiles.set(key, tile)
+            this.walls.add(key)
+          }
+        }
       }
     }
-
-    return wallCols
   }
 
   update(playerGY: number) {
-    // 위로 새 청크 필요하면 생성
-    const highestRow = this.chunks.reduce(
-      (min, c) => Math.min(min, c.startRow - CHUNK_HEIGHT),
-      Infinity
-    )
-    if (highestRow > playerGY - CHUNK_HEIGHT * 3) {
-      this.generateChunk(highestRow)
+    const playerChunk = Math.ceil(playerGY / PATTERN_HEIGHT)
+
+    // 위로 3청크 미리 생성
+    for (let i = playerChunk - 4; i <= playerChunk + 2; i++) {
+      this.generateChunk(i)
     }
 
     // 너무 아래 청크 제거
-    this.chunks = this.chunks.filter(chunk => {
-      if (chunk.startRow > playerGY + CHUNK_HEIGHT * 4) {
-        chunk.tiles.forEach(t => t.destroy())
-        for (let row = chunk.startRow; row > chunk.startRow - CHUNK_HEIGHT; row--) {
-          for (let col = -1; col <= COLS; col++) {
-            this.walls.delete(`${col},${row}`)
-          }
-        }
-        return false
+    const minChunk = playerChunk - 6
+    for (const [key, tile] of this.tiles) {
+      const [, rowStr] = key.split(',')
+      const row = parseInt(rowStr)
+      const chunk = Math.ceil(row / PATTERN_HEIGHT)
+      if (chunk > playerChunk + 4) {
+        tile.destroy()
+        this.tiles.delete(key)
+        this.walls.delete(key)
       }
-      return true
-    })
+    }
   }
 }

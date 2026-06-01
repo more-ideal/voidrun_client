@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
+import { DeathZone } from '../objects/DeathZone'
 
 const PLAYER_START_GX = Math.floor(COLS / 2)
 const PLAYER_START_GY = 18
@@ -9,6 +10,7 @@ const PLAYER_START_GY = 18
 export class GameScene extends Phaser.Scene {
   private player!: Player
   private mapGen!: MapGenerator
+  private deathZone!: DeathZone
   private walls: Set<string> = new Set()
   private scoreText!: Phaser.GameObjects.Text
   private heightText!: Phaser.GameObjects.Text
@@ -25,30 +27,25 @@ export class GameScene extends Phaser.Scene {
     this.walls = new Set()
 
     this.cameras.main.setBounds(0, -99999, width, 99999 + height)
+    this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
 
-    this.add.rectangle(width / 2, height / 2, width, height, 0x080810)
-      .setScrollFactor(0)
-
+    // 맵 생성
     this.mapGen = new MapGenerator(this, this.walls)
     this.mapGen.init(PLAYER_START_GY)
 
+    // 플레이어
     this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
     this.startPlayerY = this.player.y
 
-    // 카메라가 플레이어 rect 따라가게
+    // 카메라
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
-    this.cameras.main.setFollowOffset(0, height * 0.25)
+    this.cameras.main.setFollowOffset(0, height * 0.2)
 
-    this.createDeathZone(width, height)
+    // 데스존 - 플레이어 아래 월드 좌표에서 시작
+    const dzStartY = (PLAYER_START_GY + 8) * TILE
+    this.deathZone = new DeathZone(this, dzStartY)
+
     this.createHUD(width)
-  }
-
-  private createDeathZone(width: number, height: number) {
-    const dz = this.add.graphics().setScrollFactor(0)
-    dz.fillGradientStyle(0x440011, 0x440011, 0xff2255, 0xff2255, 0.0, 0.0, 0.9, 0.9)
-    dz.fillRect(0, height - 80, width, 80)
-    dz.lineStyle(2, 0xff2255, 0.8)
-    dz.lineBetween(0, height - 80, width, height - 80)
   }
 
   private createHUD(width: number) {
@@ -81,9 +78,10 @@ export class GameScene extends Phaser.Scene {
     }).setScrollFactor(0)
   }
 
-  update() {
+  update(_: number, delta: number) {
     this.player.update(this.walls)
     this.mapGen.update(this.player.gridY)
+    this.deathZone.update(delta)
 
     const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
     this.heightText.setText(h + 'm')
