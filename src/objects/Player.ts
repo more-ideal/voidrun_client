@@ -2,12 +2,10 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
-const MAP_WIDTH = COLS * TILE  // 480px
 
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
   private scene: Phaser.Scene
-  private isMoving = false
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: {
     up: Phaser.Input.Keyboard.Key
@@ -15,7 +13,11 @@ export class Player {
     left: Phaser.Input.Keyboard.Key
     right: Phaser.Input.Keyboard.Key
   }
+  private currentTween: Phaser.Tweens.Tween | null = null
+  private nextMove: { dx: number, dy: number } | null = null
+  private walls: Set<string> = new Set()
   private lastTrailPos = { x: 0, y: 0 }
+  private isMoving = false
 
   gridX: number
   gridY: number
@@ -46,20 +48,26 @@ export class Player {
   }
 
   update(walls: Set<string>) {
-    if (this.isMoving) return
-
-    let dx = 0, dy = 0
+    this.walls = walls
     const { JustDown } = Phaser.Input.Keyboard
+    let dx = 0, dy = 0
 
     if (JustDown(this.cursors.left) || JustDown(this.wasd.left)) dx = -1
     else if (JustDown(this.cursors.right) || JustDown(this.wasd.right)) dx = 1
     else if (JustDown(this.cursors.up) || JustDown(this.wasd.up)) dy = -1
     else if (JustDown(this.cursors.down) || JustDown(this.wasd.down)) dy = 1
 
-    if (dx !== 0 || dy !== 0) this.slide(dx, dy, walls)
+    if (dx !== 0 || dy !== 0) {
+      if (!this.isMoving) {
+        this.slide(dx, dy)
+      } else {
+        // 이동 중이면 다음 이동으로 큐에 저장
+        this.nextMove = { dx, dy }
+      }
+    }
   }
 
-  private slide(dx: number, dy: number, walls: Set<string>) {
+  private slide(dx: number, dy: number) {
     let nx = this.gridX + dx
     let ny = this.gridY + dy
     let steps = 0
@@ -67,7 +75,7 @@ export class Player {
     while (
       steps < MAX_SLIDE &&
       nx >= 0 && nx < COLS &&
-      !walls.has(`${nx},${ny}`)
+      !this.walls.has(`${nx},${ny}`)
     ) {
       nx += dx
       ny += dy
@@ -88,9 +96,9 @@ export class Player {
     this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
 
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
-    const duration = Math.max(50, dist * 18)  // 속도 증가
+    const duration = Math.max(35, dist * 12)  // 속도 더 증가
 
-    this.scene.tweens.add({
+    this.currentTween = this.scene.tweens.add({
       targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
@@ -99,7 +107,7 @@ export class Player {
       onUpdate: () => {
         const ddx = this.rect.x - this.lastTrailPos.x
         const ddy = this.rect.y - this.lastTrailPos.y
-        if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.4) {
+        if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.35) {
           this.createTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
           this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
         }
@@ -108,6 +116,14 @@ export class Player {
         this.gridX = nx
         this.gridY = ny
         this.isMoving = false
+        this.currentTween = null
+
+        // 큐에 다음 이동이 있으면 즉시 실행
+        if (this.nextMove) {
+          const m = this.nextMove
+          this.nextMove = null
+          this.slide(m.dx, m.dy)
+        }
       }
     })
   }
@@ -118,7 +134,7 @@ export class Player {
     this.scene.tweens.add({
       targets: trail,
       alpha: 0,
-      duration: 280,
+      duration: 260,
       onComplete: () => trail.destroy()
     })
   }
@@ -135,7 +151,7 @@ export class Player {
         alpha: 0,
         scaleX: 0,
         scaleY: 0,
-        duration: 200,
+        duration: 180,
         ease: 'Quad.easeOut',
         onComplete: () => p.destroy()
       })

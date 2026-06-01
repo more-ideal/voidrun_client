@@ -6,8 +6,8 @@ import { DeathZone } from '../objects/DeathZone'
 
 const PLAYER_START_GX = Math.floor(COLS / 2)
 const PLAYER_START_GY = 18
-const MAP_W = COLS * TILE   // 480
-const PANEL_X = MAP_W + 10  // UI 패널 시작 x
+const MAP_W = COLS * TILE
+const PANEL_X = MAP_W + 10
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
@@ -28,11 +28,15 @@ export class GameScene extends Phaser.Scene {
     this.score = 0
     this.walls = new Set()
 
-    // 카메라는 맵 영역(480px)만 따라다님
     this.cameras.main.setBounds(0, -99999, MAP_W, 99999 + height)
 
     // 배경
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
+
+    // 맵 테두리 (밝은 색으로 배경과 구분)
+    const border = this.add.graphics().setScrollFactor(0).setDepth(20)
+    border.lineStyle(1.5, 0x2a5080, 1)
+    border.strokeRect(0, 0, MAP_W, height)
 
     // 맵/UI 구분선
     this.add.rectangle(MAP_W + 1, height / 2, 1, height, 0x1a3a5c)
@@ -46,7 +50,6 @@ export class GameScene extends Phaser.Scene {
     this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
     this.startPlayerY = this.player.y
 
-    // 카메라 follow
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
     this.cameras.main.setFollowOffset(0, height * 0.2)
 
@@ -54,17 +57,14 @@ export class GameScene extends Phaser.Scene {
     const dzStartY = (PLAYER_START_GY + 8) * TILE
     this.deathZone = new DeathZone(this, dzStartY)
 
-    // 우측 패널 HUD
     this.createPanel(height)
   }
 
   private createPanel(height: number) {
-    // 패널 배경
     const bg = this.add.graphics().setScrollFactor(0).setDepth(20)
     bg.fillStyle(0x0a0f1a, 1)
     bg.fillRect(MAP_W, 0, 100, height)
 
-    // SCORE
     this.add.text(PANEL_X, 20, 'SCORE', {
       fontSize: '10px', fontFamily: 'monospace', color: '#7799aa'
     }).setScrollFactor(0).setDepth(21)
@@ -73,12 +73,10 @@ export class GameScene extends Phaser.Scene {
       fontSize: '22px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
     }).setScrollFactor(0).setDepth(21)
 
-    // 구분선
     const div = this.add.graphics().setScrollFactor(0).setDepth(21)
     div.lineStyle(1, 0x1a3a5c, 1)
     div.lineBetween(PANEL_X, 75, MAP_W + 90, 75)
 
-    // HEIGHT
     this.add.text(PANEL_X, 84, 'HEIGHT', {
       fontSize: '10px', fontFamily: 'monospace', color: '#7799aa'
     }).setScrollFactor(0).setDepth(21)
