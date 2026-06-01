@@ -16,22 +16,19 @@
       overflow: hidden;
     }
 
-    #wrapper {
-      display: flex;
-      align-items: stretch;
-      position: relative;
-    }
-
     #game canvas { display: block; }
 
+    /* 점수 패널 - 화면 오른쪽에 fixed */
     #ui-panel {
-      width: 160px;
-      background: #0a0f1a;
-      border-left: 1px solid #1a3a5c;
-      padding: 24px 18px;
-      display: none;   /* 게임 중에만 표시 */
+      position: fixed;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: none;
       flex-direction: column;
       gap: 4px;
+      background: none;
+      padding: 0;
     }
 
     #ui-panel.visible { display: flex; }
@@ -58,26 +55,16 @@
       background: #1a3a5c;
       margin: 10px 0;
     }
-
-    #ui-pause-hint {
-      margin-top: auto;
-      font-family: monospace;
-      font-size: 10px;
-      color: #334455;
-    }
   </style>
 </head>
 <body>
-  <div id="wrapper">
-    <div id="game"></div>
-    <div id="ui-panel">
-      <div class="ui-label">SCORE</div>
-      <div class="ui-value" id="ui-score">0</div>
-      <div class="ui-divider"></div>
-      <div class="ui-label">HEIGHT</div>
-      <div class="ui-value" id="ui-height">0m</div>
-      <div id="ui-pause-hint">ESC · pause</div>
-    </div>
+  <div id="game"></div>
+  <div id="ui-panel">
+    <div class="ui-label">SCORE</div>
+    <div class="ui-value" id="ui-score">0</div>
+    <div class="ui-divider"></div>
+    <div class="ui-label">HEIGHT</div>
+    <div class="ui-value" id="ui-height">0m</div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
