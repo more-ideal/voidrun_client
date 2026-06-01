@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
+const MAP_WIDTH = COLS * TILE  // 480px
 
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
@@ -14,6 +15,7 @@ export class Player {
     left: Phaser.Input.Keyboard.Key
     right: Phaser.Input.Keyboard.Key
   }
+  private lastTrailPos = { x: 0, y: 0 }
 
   gridX: number
   gridY: number
@@ -74,7 +76,6 @@ export class Player {
     nx -= dx
     ny -= dy
 
-    // 제자리 = 벽에 바로 붙어있는 경우 → 충돌 이펙트만
     if (nx === this.gridX && ny === this.gridY) {
       this.spawnHitEffect(
         (this.gridX + dx) * TILE + TILE / 2,
@@ -84,87 +85,59 @@ export class Player {
     }
 
     this.isMoving = true
-
-    // 잔상: 지나온 모든 타일에 남기기
-    this.spawnTrails(nx, ny)
+    this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
 
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
+    const duration = Math.max(50, dist * 18)  // 속도 증가
 
     this.scene.tweens.add({
       targets: this.rect,
       x: nx * TILE + TILE / 2,
       y: ny * TILE + TILE / 2,
-      duration: Math.max(70, dist * 28),
+      duration,
       ease: 'Quad.easeOut',
+      onUpdate: () => {
+        const ddx = this.rect.x - this.lastTrailPos.x
+        const ddy = this.rect.y - this.lastTrailPos.y
+        if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.4) {
+          this.createTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
+          this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
+        }
+      },
       onComplete: () => {
         this.gridX = nx
         this.gridY = ny
         this.isMoving = false
-        // 도착 시 작은 충돌 이펙트
-        this.spawnHitEffect(this.rect.x, this.rect.y, true)
       }
     })
   }
 
-  private spawnTrails(targetGX: number, targetGY: number) {
-    const steps = Math.max(
-      Math.abs(targetGX - this.gridX),
-      Math.abs(targetGY - this.gridY)
-    )
-    if (steps <= 0) return
-
-    const dx = (targetGX - this.gridX) / steps
-    const dy = (targetGY - this.gridY) / steps
-
-    // 출발지부터 도착지 직전까지 잔상
-    for (let i = 0; i < steps; i++) {
-      const tx = (this.gridX + dx * i) * TILE + TILE / 2
-      const ty = (this.gridY + dy * i) * TILE + TILE / 2
-      const alpha = 0.55 - (i / steps) * 0.45
-
-      const trail = this.scene.add.rectangle(tx, ty, TILE - 8, TILE - 8, 0x00e5cc)
-      trail.setAlpha(alpha).setDepth(9)
-
-      this.scene.tweens.add({
-        targets: trail,
-        alpha: 0,
-        duration: 350,
-        delay: i * 15,
-        onComplete: () => trail.destroy()
-      })
-    }
+  private createTrailAt(x: number, y: number) {
+    const trail = this.scene.add.rectangle(x, y, TILE - 8, TILE - 8, 0x00e5cc)
+    trail.setAlpha(0.5).setDepth(9)
+    this.scene.tweens.add({
+      targets: trail,
+      alpha: 0,
+      duration: 280,
+      onComplete: () => trail.destroy()
+    })
   }
 
-  private spawnHitEffect(wx: number, wy: number, soft = false) {
-    const count = soft ? 3 : 6
-    const spread = soft ? 8 : 16
-
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2
-      const p = this.scene.add.rectangle(wx, wy, 5, 5, 0x00e5cc)
+  private spawnHitEffect(wx: number, wy: number) {
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2
+      const p = this.scene.add.rectangle(wx, wy, 4, 4, 0x00e5cc)
       p.setDepth(11)
-
       this.scene.tweens.add({
         targets: p,
-        x: wx + Math.cos(angle) * spread,
-        y: wy + Math.sin(angle) * spread,
+        x: wx + Math.cos(angle) * 14,
+        y: wy + Math.sin(angle) * 14,
         alpha: 0,
         scaleX: 0,
         scaleY: 0,
-        duration: soft ? 150 : 220,
+        duration: 200,
         ease: 'Quad.easeOut',
         onComplete: () => p.destroy()
-      })
-    }
-
-    // 캐릭터 flash
-    if (!soft) {
-      this.scene.tweens.add({
-        targets: this.rect,
-        alpha: 0.2,
-        yoyo: true,
-        duration: 70,
-        repeat: 1,
       })
     }
   }

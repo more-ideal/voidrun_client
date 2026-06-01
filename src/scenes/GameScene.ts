@@ -6,6 +6,8 @@ import { DeathZone } from '../objects/DeathZone'
 
 const PLAYER_START_GX = Math.floor(COLS / 2)
 const PLAYER_START_GY = 18
+const MAP_W = COLS * TILE   // 480
+const PANEL_X = MAP_W + 10  // UI 패널 시작 x
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
@@ -26,8 +28,15 @@ export class GameScene extends Phaser.Scene {
     this.score = 0
     this.walls = new Set()
 
-    this.cameras.main.setBounds(0, -99999, width, 99999 + height)
+    // 카메라는 맵 영역(480px)만 따라다님
+    this.cameras.main.setBounds(0, -99999, MAP_W, 99999 + height)
+
+    // 배경
     this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
+
+    // 맵/UI 구분선
+    this.add.rectangle(MAP_W + 1, height / 2, 1, height, 0x1a3a5c)
+      .setScrollFactor(0).setDepth(20)
 
     // 맵 생성
     this.mapGen = new MapGenerator(this, this.walls)
@@ -37,45 +46,46 @@ export class GameScene extends Phaser.Scene {
     this.player = new Player(this, PLAYER_START_GX, PLAYER_START_GY)
     this.startPlayerY = this.player.y
 
-    // 카메라
+    // 카메라 follow
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
     this.cameras.main.setFollowOffset(0, height * 0.2)
 
-    // 데스존 - 플레이어 아래 월드 좌표에서 시작
+    // 데스존
     const dzStartY = (PLAYER_START_GY + 8) * TILE
     this.deathZone = new DeathZone(this, dzStartY)
 
-    this.createHUD(width)
+    // 우측 패널 HUD
+    this.createPanel(height)
   }
 
-  private createHUD(width: number) {
-    const sg = this.add.graphics().setScrollFactor(0)
-    sg.fillStyle(0x0d1a2e, 0.85)
-    sg.fillRect(8, 8, 120, 52)
-    sg.lineStyle(1, 0x1a3a5c, 1)
-    sg.strokeRect(8, 8, 120, 52)
+  private createPanel(height: number) {
+    // 패널 배경
+    const bg = this.add.graphics().setScrollFactor(0).setDepth(20)
+    bg.fillStyle(0x0a0f1a, 1)
+    bg.fillRect(MAP_W, 0, 100, height)
 
-    this.add.text(20, 16, 'SCORE', {
+    // SCORE
+    this.add.text(PANEL_X, 20, 'SCORE', {
       fontSize: '10px', fontFamily: 'monospace', color: '#7799aa'
-    }).setScrollFactor(0)
+    }).setScrollFactor(0).setDepth(21)
 
-    this.scoreText = this.add.text(20, 32, '0', {
-      fontSize: '20px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
-    }).setScrollFactor(0)
+    this.scoreText = this.add.text(PANEL_X, 36, '0', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#00e5cc', fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(21)
 
-    const hg = this.add.graphics().setScrollFactor(0)
-    hg.fillStyle(0x0d1a2e, 0.85)
-    hg.fillRect(width - 128, 8, 120, 52)
-    hg.lineStyle(1, 0x1a3a5c, 1)
-    hg.strokeRect(width - 128, 8, 120, 52)
+    // 구분선
+    const div = this.add.graphics().setScrollFactor(0).setDepth(21)
+    div.lineStyle(1, 0x1a3a5c, 1)
+    div.lineBetween(PANEL_X, 75, MAP_W + 90, 75)
 
-    this.add.text(width - 116, 16, 'HEIGHT', {
+    // HEIGHT
+    this.add.text(PANEL_X, 84, 'HEIGHT', {
       fontSize: '10px', fontFamily: 'monospace', color: '#7799aa'
-    }).setScrollFactor(0)
+    }).setScrollFactor(0).setDepth(21)
 
-    this.heightText = this.add.text(width - 116, 32, '0m', {
-      fontSize: '20px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
-    }).setScrollFactor(0)
+    this.heightText = this.add.text(PANEL_X, 100, '0m', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(21)
   }
 
   update(_: number, delta: number) {
