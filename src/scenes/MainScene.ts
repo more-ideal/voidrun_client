@@ -118,26 +118,7 @@ export class MainScene extends Phaser.Scene {
     zone.on('pointerdown', () => this.scene.start('SettingsScene'))
   }
 
-  private drawControls(cx: number, y: number) {
-    const keys = ['↑', '↓', '←', '→']
-    const startX = cx - 72
-    keys.forEach((k, i) => {
-      const gfx = this.add.graphics()
-      gfx.lineStyle(1, 0x223344, 1)
-      gfx.strokeRect(startX + i * 36 - 12, y - 12, 24, 24)
-      this.add.text(startX + i * 36, y, k, {
-        fontSize: '13px',
-        fontFamily: 'monospace',
-        color: '#445566',
-      }).setOrigin(0.5)
-    })
-
-    this.add.text(cx + 65, y, 'TO SLIDE', {
-      fontSize: '11px',
-      fontFamily: 'monospace',
-      color: '#334455',
-    }).setOrigin(0, 0.5)
-  }
+  private drawControls(cx: number, y: number) { }
 
   private getHighScore(): number {
     return parseInt(localStorage.getItem('voidrun_highscore') ?? '0')

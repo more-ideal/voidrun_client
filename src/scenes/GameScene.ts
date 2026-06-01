@@ -108,7 +108,7 @@ export class GameScene extends Phaser.Scene {
     this.mapGen.update(this.player.gridY)
     this.deathZone.update(delta)
 
-    const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
+    const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE ))
     updateScore(this.score)
     updateHeight(h)
 

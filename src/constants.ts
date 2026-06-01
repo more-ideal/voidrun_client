@@ -1,3 +1,3 @@
-export const TILE = 32
-export const COLS = 15
+export const TILE = 27
+export const COLS = 17
 export const ROWS = 22

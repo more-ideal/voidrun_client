@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
-const MAX_SLIDE = 30
+const MAX_SLIDE = 50
 export const SLIDE_SPEED_MIN = 50
 export const SLIDE_SPEED_PER_TILE = 5
 export const GRADIENT_FADE_DURATION = 200
