@@ -2,8 +2,8 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
-export const SLIDE_SPEED_MIN = 30
-export const SLIDE_SPEED_PER_TILE = 9
+export const SLIDE_SPEED_MIN = 60      // 원래 속도로 복구
+export const SLIDE_SPEED_PER_TILE = 25
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
@@ -21,6 +21,7 @@ export class Player {
   private walls: Set<string> = new Set()
   private lastTrailPos = { x: 0, y: 0 }
   private isMoving = false
+  private gradientGfx: Phaser.GameObjects.Graphics | null = null
   trailEffect: TrailEffect = 'box'
 
   gridX: number
@@ -88,13 +89,17 @@ export class Player {
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
     const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
+    // 그라데이션: 이전 꼬리 정리 후 새 gfx 생성
     if (this.trailEffect === 'gradient') {
-      this.spawnGradientTail(
-        this.rect.x, this.rect.y,
-        nx * TILE + TILE / 2, ny * TILE + TILE / 2,
-        dx, dy
-      )
+      if (this.gradientGfx) {
+        this.gradientGfx.destroy()
+        this.gradientGfx = null
+      }
+      this.gradientGfx = this.scene.add.graphics().setDepth(9)
     }
+
+    const startX = this.rect.x
+    const startY = this.rect.y
 
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
@@ -103,23 +108,70 @@ export class Player {
       duration,
       ease: 'Quad.easeOut',
       onUpdate: () => {
-        if (this.trailEffect === 'gradient') return
-        const ddx = this.rect.x - this.lastTrailPos.x
-        const ddy = this.rect.y - this.lastTrailPos.y
-        if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.3) {
-          this.spawnTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
-          this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
+        if (this.trailEffect === 'gradient' && this.gradientGfx) {
+          // 매 프레임: 출발점 ~ 현재 위치 사이를 그라데이션으로 다시 그림
+          this.drawLiveGradient(this.gradientGfx, startX, startY, this.rect.x, this.rect.y, dx, dy)
+        } else {
+          const ddx = this.rect.x - this.lastTrailPos.x
+          const ddy = this.rect.y - this.lastTrailPos.y
+          if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.3) {
+            this.spawnTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
+            this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
+          }
         }
       },
       onComplete: () => {
         this.gridX = nx; this.gridY = ny
         this.isMoving = false; this.currentTween = null
+
+        // 그라데이션 꼬리 서서히 사라짐
+        if (this.gradientGfx) {
+          const g = this.gradientGfx
+          this.gradientGfx = null
+          this.scene.tweens.add({ targets: g, alpha: 0, duration: 280, onComplete: () => g.destroy() })
+        }
+
         if (this.nextMove) {
           const m = this.nextMove; this.nextMove = null
           this.slide(m.dx, m.dy)
         }
       }
     })
+  }
+
+  // 실시간 그라데이션: 출발지(뒤) 진 → 현재 위치(앞=캐릭터) 투명
+  private drawLiveGradient(
+    gfx: Phaser.GameObjects.Graphics,
+    sx: number, sy: number,
+    cx: number, cy: number,
+    dx: number, dy: number
+  ) {
+    gfx.clear()
+    const W = TILE - 4
+
+    if (dx !== 0) {
+      const x1 = Math.min(sx, cx) - W / 2
+      const w = Math.abs(cx - sx) + W
+      if (dx > 0) {
+        // 오른쪽 이동: 왼쪽(출발/뒤) 진 → 오른쪽(캐릭터/앞) 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0, 0.7, 0)
+      } else {
+        // 왼쪽 이동: 오른쪽(출발/뒤) 진 → 왼쪽(캐릭터/앞) 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.7, 0, 0.7)
+      }
+      gfx.fillRect(x1, sy - W / 2, w, W)
+    } else {
+      const y1 = Math.min(sy, cy) - W / 2
+      const h = Math.abs(cy - sy) + W
+      if (dy < 0) {
+        // 위로 이동: 아래(출발/뒤) 진 → 위(캐릭터/앞) 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.7, 0.7)
+      } else {
+        // 아래로 이동: 위(출발/뒤) 진 → 아래(캐릭터/앞) 투명
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0.7, 0, 0)
+      }
+      gfx.fillRect(sx - W / 2, y1, W, h)
+    }
   }
 
   private spawnTrailAt(x: number, y: number) {
@@ -133,38 +185,6 @@ export class Player {
   private trailBox(x: number, y: number) {
     const t = this.scene.add.rectangle(x, y, TILE - 8, TILE - 8, 0x00e5cc).setAlpha(0.45).setDepth(9)
     this.scene.tweens.add({ targets: t, alpha: 0, duration: 260, onComplete: () => t.destroy() })
-  }
-
-  // 그라데이션 — 출발지 투명, 목적지 진하게 (반전)
-  private spawnGradientTail(sx: number, sy: number, ex: number, ey: number, dx: number, dy: number) {
-    const gfx = this.scene.add.graphics().setDepth(9)
-    const W = TILE - 6
-
-    if (dx !== 0) {
-      const x1 = Math.min(sx, ex) - W / 2
-      const w = Math.abs(ex - sx) + W
-      if (dx > 0) {
-        // 오른쪽 이동: 왼쪽(출발) 투명 → 오른쪽(목적) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.65, 0, 0.65)
-      } else {
-        // 왼쪽 이동: 오른쪽(출발) 투명 → 왼쪽(목적) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0, 0.65, 0)
-      }
-      gfx.fillRect(x1, sy - W / 2, w, W)
-    } else {
-      const y1 = Math.min(sy, ey) - W / 2
-      const h = Math.abs(ey - sy) + W
-      if (dy < 0) {
-        // 위로 이동: 아래(출발) 투명 → 위(목적) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0.65, 0, 0)
-      } else {
-        // 아래로 이동: 위(출발) 투명 → 아래(목적) 진
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.65, 0.65)
-      }
-      gfx.fillRect(sx - W / 2, y1, W, h)
-    }
-
-    this.scene.tweens.add({ targets: gfx, alpha: 0, duration: 450, onComplete: () => gfx.destroy() })
   }
 
   private trailSpark(x: number, y: number) {
