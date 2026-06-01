@@ -7,8 +7,6 @@ export const SLIDE_SPEED_PER_TILE = 9
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
-const GRADIENT_COLORS = [0xff6ec7, 0xffb347, 0xffff66, 0x66ff66, 0x66cfff, 0xb366ff]
-
 export class Player {
   private rect: Phaser.GameObjects.Rectangle
   private scene: Phaser.Scene
@@ -22,7 +20,6 @@ export class Player {
   private nextMove: { dx: number, dy: number } | null = null
   private walls: Set<string> = new Set()
   private lastTrailPos = { x: 0, y: 0 }
-  private trailColorIdx = 0
   private isMoving = false
   trailEffect: TrailEffect = 'box'
 
@@ -91,7 +88,6 @@ export class Player {
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
     const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
-    // 그라데이션은 이동 시작 시 경로 전체를 한 번에 그림
     if (this.trailEffect === 'gradient') {
       this.spawnGradientTail(
         this.rect.x, this.rect.y,
@@ -107,7 +103,7 @@ export class Player {
       duration,
       ease: 'Quad.easeOut',
       onUpdate: () => {
-        if (this.trailEffect === 'gradient') return  // gradient는 위에서 처리
+        if (this.trailEffect === 'gradient') return
         const ddx = this.rect.x - this.lastTrailPos.x
         const ddy = this.rect.y - this.lastTrailPos.y
         if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.3) {
@@ -134,13 +130,12 @@ export class Player {
     }
   }
 
-  // 1. 네모 잔상
   private trailBox(x: number, y: number) {
     const t = this.scene.add.rectangle(x, y, TILE - 8, TILE - 8, 0x00e5cc).setAlpha(0.45).setDepth(9)
     this.scene.tweens.add({ targets: t, alpha: 0, duration: 260, onComplete: () => t.destroy() })
   }
 
-  // 2. 그라데이션 잔상 — 이동 경로 전체를 방향에 따라 그라데이션으로
+  // 그라데이션 — 출발지 투명, 목적지 진하게 (반전)
   private spawnGradientTail(sx: number, sy: number, ex: number, ey: number, dx: number, dy: number) {
     const gfx = this.scene.add.graphics().setDepth(9)
     const W = TILE - 6
@@ -148,23 +143,23 @@ export class Player {
     if (dx !== 0) {
       const x1 = Math.min(sx, ex) - W / 2
       const w = Math.abs(ex - sx) + W
-      // 이동 뒤(출발지)가 진하고 앞(목적지)이 투명
       if (dx > 0) {
-        // 오른쪽 이동: 왼쪽 진, 오른쪽 투명
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0, 0.65, 0)
-      } else {
-        // 왼쪽 이동: 오른쪽 진, 왼쪽 투명
+        // 오른쪽 이동: 왼쪽(출발) 투명 → 오른쪽(목적) 진
         gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.65, 0, 0.65)
+      } else {
+        // 왼쪽 이동: 오른쪽(출발) 투명 → 왼쪽(목적) 진
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0, 0.65, 0)
       }
       gfx.fillRect(x1, sy - W / 2, w, W)
     } else {
       const y1 = Math.min(sy, ey) - W / 2
       const h = Math.abs(ey - sy) + W
-      // 위로 이동: 아래(출발지) 진, 위(목적지) 투명
       if (dy < 0) {
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.65, 0.65)
-      } else {
+        // 위로 이동: 아래(출발) 투명 → 위(목적) 진
         gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.65, 0.65, 0, 0)
+      } else {
+        // 아래로 이동: 위(출발) 투명 → 아래(목적) 진
+        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.65, 0.65)
       }
       gfx.fillRect(sx - W / 2, y1, W, h)
     }
@@ -172,7 +167,6 @@ export class Player {
     this.scene.tweens.add({ targets: gfx, alpha: 0, duration: 450, onComplete: () => gfx.destroy() })
   }
 
-  // 3. 스파크 잔상
   private trailSpark(x: number, y: number) {
     for (let i = 0; i < 4; i++) {
       const angle = Math.random() * Math.PI * 2
@@ -186,7 +180,6 @@ export class Player {
     }
   }
 
-  // 4. 고스트 잔상
   private trailGhost(x: number, y: number) {
     const t = this.scene.add.rectangle(x, y, TILE - 2, TILE - 2, 0x00e5cc).setAlpha(0.22).setDepth(8)
     this.scene.tweens.add({
