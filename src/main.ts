@@ -12,7 +12,7 @@ const config: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 480,   // 맵만 (UI는 HTML)
+    width: 480,   
     height: 720,
   },
   scene: [MainScene, GameScene, GameOverScene, PauseScene, SettingsScene],
