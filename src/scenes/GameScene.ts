@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+﻿import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
@@ -54,7 +54,7 @@ export class GameScene extends Phaser.Scene {
     )
     this.startPlayerY = this.player.y
 
-    this.player.onArrived = (gx, gy) => this.handleTileArrival(gx, gy)
+    this.player.onPassThrough = (gx, gy) => this.handleTileArrival(gx, gy)
 
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
     this.cameras.main.setFollowOffset(0, height * 0.2)

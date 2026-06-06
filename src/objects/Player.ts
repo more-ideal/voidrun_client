@@ -2,8 +2,8 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
-export const SLIDE_SPEED_MIN = 60
-export const SLIDE_SPEED_PER_TILE = 25
+export const SLIDE_SPEED_MIN = 40
+export const SLIDE_SPEED_PER_TILE = 14  // 속도 복구
 export const GRADIENT_FADE_DURATION = 120
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
@@ -23,10 +23,11 @@ export class Player {
   private lastTrailPos = { x: 0, y: 0 }
   private isMoving = false
   private gradientGfx: Phaser.GameObjects.Graphics | null = null
+
   trailEffect: TrailEffect = 'box'
 
-  // 이동 완료 콜백
-  onArrived?: (gx: number, gy: number) => void
+  // 지나치는 모든 그리드에서 호출
+  onPassThrough?: (gx: number, gy: number) => void
 
   gridX: number
   gridY: number
@@ -103,6 +104,10 @@ export class Player {
 
     const startX = this.rect.x, startY = this.rect.y
 
+    // 경로상 그리드 추적용
+    let lastCheckedGX = this.gridX
+    let lastCheckedGY = this.gridY
+
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
       x: nx * TILE + TILE / 2,
@@ -110,6 +115,16 @@ export class Player {
       duration,
       ease: 'Quad.easeOut',
       onUpdate: () => {
+        // 경로상 지나치는 그리드 체크
+        const curGX = Math.round((this.rect.x - TILE / 2) / TILE)
+        const curGY = Math.round((this.rect.y - TILE / 2) / TILE)
+        if (curGX !== lastCheckedGX || curGY !== lastCheckedGY) {
+          lastCheckedGX = curGX
+          lastCheckedGY = curGY
+          this.onPassThrough?.(curGX, curGY)
+        }
+
+        // 잔상
         if (this.trailEffect === 'gradient' && this.gradientGfx) {
           this.drawLiveGradient(this.gradientGfx, startX, startY, this.rect.x, this.rect.y, dx, dy)
         } else {
@@ -128,8 +143,8 @@ export class Player {
           const g = this.gradientGfx; this.gradientGfx = null
           this.scene.tweens.add({ targets: g, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => g.destroy() })
         }
-        // 이동 완료 콜백
-        this.onArrived?.(this.gridX, this.gridY)
+        // 최종 도착 위치도 체크
+        this.onPassThrough?.(this.gridX, this.gridY)
         if (this.nextMove) {
           const m = this.nextMove; this.nextMove = null
           this.slide(m.dx, m.dy)
@@ -156,7 +171,7 @@ export class Player {
 
   private spawnTrailAt(x: number, y: number) {
     switch (this.trailEffect) {
-      case 'box': this.trailBox(x, y); break
+      case 'box':   this.trailBox(x, y); break
       case 'spark': this.trailSpark(x, y); break
       case 'ghost': this.trailGhost(x, y); break
     }
