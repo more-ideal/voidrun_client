@@ -63,7 +63,10 @@ export class MapGenerator {
   }
 
   private addChunk() {
-    const available = PATTERNS.filter((_, i) => i !== START_IDX)
+    // 패턴이 1개뿐이면 그걸 반복 사용
+    const available = PATTERNS.length > 1
+      ? PATTERNS.filter((_, i) => i !== START_IDX)
+      : PATTERNS
     const pattern = available[Math.floor(Math.random() * available.length)]
     this.placeChunk(pattern, this.placedChunks)
     this.placedChunks++
