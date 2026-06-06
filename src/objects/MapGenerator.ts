@@ -1,83 +1,11 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
-
-const MAX_ATTEMPTS = 60
-const BUFFER_AHEAD = 28
-const MIN_LONG_GAP = 5   // 긴 장애물 사이 최소 빈 행 수
-
-type Row = number[]
-
-// ── 슬라이딩 물리 ──────────────────────────────
-function slideStop(rows: Row[], sr: number, sc: number, dr: number, dc: number) {
-  let r = sr, c = sc
-  for (;;) {
-    const nr = r + dr, nc = c + dc
-    if (nr < 0 || nr >= rows.length || nc < 0 || nc >= COLS) break
-    if (rows[nr][nc] === 1) break
-    r = nr; c = nc
-  }
-  return { r, c }
-}
-
-const DIRS = [[1,0],[-1,0],[0,1],[0,-1]] as const
-
-function reachable(rows: Row[], start: {r:number,c:number}) {
-  const seen = new Set<number>([start.r * COLS + start.c])
-  const stack = [{...start}]
-  const nodes: {r:number,c:number}[] = []
-  while (stack.length) {
-    const cur = stack.pop()!
-    nodes.push(cur)
-    for (const [dr,dc] of DIRS) {
-      const n = slideStop(rows, cur.r, cur.c, dr, dc)
-      const k = n.r * COLS + n.c
-      if ((n.r !== cur.r || n.c !== cur.c) && !seen.has(k)) {
-        seen.add(k); stack.push(n)
-      }
-    }
-  }
-  return nodes
-}
-
-function canReachTop(rows: Row[], start: {r:number,c:number}): boolean {
-  const top = rows.length - 1
-  const key = (r:number,c:number) => r * COLS + c
-  const nodes = reachable(rows, start)
-
-  const radj = new Map<number, number[]>()
-  for (const {r,c} of nodes) {
-    for (const [dr,dc] of DIRS) {
-      const e = slideStop(rows, r, c, dr, dc)
-      if (e.r === r && e.c === c) continue
-      const bk = key(e.r, e.c), ak = key(r, c)
-      const list = radj.get(bk)
-      if (list) list.push(ak); else radj.set(bk, [ak])
-    }
-  }
-
-  const upOK = new Set<number>()
-  const seed: number[] = []
-  for (const {r,c} of nodes) {
-    if (r >= top) { const k = key(r,c); upOK.add(k); seed.push(k) }
-  }
-  while (seed.length) {
-    for (const p of (radj.get(seed.pop()!) ?? [])) {
-      if (!upOK.has(p)) { upOK.add(p); seed.push(p) }
-    }
-  }
-  return nodes.every(({r,c}) => upOK.has(key(r,c)))
-}
-
-// ── 맵 생성기 ──────────────────────────────────
+import { PATTERNS, PATTERN_HEIGHT, START_PATTERN_IDX } from './patterns'
 
 export class MapGenerator {
-  private rows: Row[] = []
+  private placedChunks = 0
   private baseGY = 0
   private tiles = new Map<string, Phaser.GameObjects.Rectangle>()
-
-  // 긴 장애물 상태 추적
-  private lastLongDir: 'left' | 'right' = 'right'  // 다음은 반대로
-  private rowsSinceLong = MIN_LONG_GAP              // 처음엔 바로 나올 수 있게
 
   constructor(
     private scene: Phaser.Scene,
@@ -86,117 +14,53 @@ export class MapGenerator {
 
   init(playerStartGY: number) {
     this.baseGY = playerStartGY
-    this.rows = [this.emptyRow()]
-    this.syncWalls()
-    for (let i = 0; i < BUFFER_AHEAD + 5; i++) this.addRow()
+    this.placedChunks = 0
+
+    // 시작 패턴 고정 배치
+    this.placeChunk(PATTERNS[START_PATTERN_IDX], 0)
+    this.placedChunks = 1
+
+    // 위로 3청크 미리 생성
+    for (let i = 0; i < 3; i++) this.addChunk()
   }
 
   update(playerGY: number) {
-    const playerIdx = this.baseGY - playerGY
-    const ahead = this.rows.length - 1 - playerIdx
-    for (let i = ahead; i < BUFFER_AHEAD; i++) this.addRow()
+    // 플레이어 위치 기준 필요한 청크 수 계산
+    const playerChunkIdx = Math.ceil((this.baseGY - playerGY) / PATTERN_HEIGHT)
+    while (this.placedChunks < playerChunkIdx + 3) {
+      this.addChunk()
+    }
 
+    // 아래 오래된 타일 정리
     for (const [k, tile] of this.tiles) {
       const gy = parseInt(k.split(',')[1])
-      if (gy > playerGY + 12) {
+      if (gy > playerGY + PATTERN_HEIGHT) {
         tile.destroy(); this.tiles.delete(k); this.walls.delete(k)
       }
     }
   }
 
-  // ── 행 추가 ──────────────────────────────────
+  // ── 청크 추가 (시작 패턴 제외 랜덤) ──
 
-  private addRow() {
-    const newGY = this.baseGY - this.rows.length
-    const startC = this.openCols(this.rows[0])[0] ?? Math.floor(COLS / 2)
-    const start = { r: 0, c: startC }
-
-    let newRow: Row | null = null
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const candidate = this.makeRow()
-      if (canReachTop([...this.rows, candidate], start)) {
-        newRow = candidate; break
-      }
-    }
-
-    if (!newRow) newRow = this.emptyRow()
-    this.rows.push(newRow)
-    this.renderRow(newRow, newGY)
-    this.rowsSinceLong++
+  private addChunk() {
+    const available = PATTERNS.filter((_, i) => i !== START_PATTERN_IDX)
+    const pattern = available[Math.floor(Math.random() * available.length)]
+    this.placeChunk(pattern, this.placedChunks)
+    this.placedChunks++
   }
 
-  // ── 행 종류 선택 ──────────────────────────────
+  // ── 청크 배치 ──
+  // row 0 = 패턴 위쪽 (gridY 작음)
+  // row PATTERN_HEIGHT-1 = 패턴 아래쪽 (gridY 큼)
 
-  private makeRow(): Row {
-    const canLong = this.rowsSinceLong >= MIN_LONG_GAP
-
-    const r = Math.random()
-
-    if (canLong && r < 0.2) {
-      // 20% 긴 장애물 (간격 조건 충족 시)
-      return this.longObstacleRow()
-    } else if (r < 0.55) {
-      // 55% 빈 행 (or 40% if long not available)
-      return this.emptyRow()
-    } else {
-      // 나머지 짧은 장애물
-      return this.shortObstacleRow()
+  private placeChunk(pattern: number[][], chunkIdx: number) {
+    for (let r = 0; r < PATTERN_HEIGHT; r++) {
+      const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
+      this.renderRow(pattern[r], gy)
     }
   }
 
-  /** 짧은 장애물: 1~2칸 클러스터 1개 */
-  private shortObstacleRow(): Row {
-    const row = this.emptyRow()
-    let tries = 0
-    while (tries++ < 20) {
-      const c = 2 + Math.floor(Math.random() * (COLS - 4))
-      // 1~2칸 클러스터
-      const size = Math.random() < 0.5 ? 1 : 2
-      let ok = true
-      for (let i = 0; i < size; i++) {
-        if (c + i >= COLS - 1 || row[c + i] !== 0) { ok = false; break }
-      }
-      if (!ok) continue
-      for (let i = 0; i < size; i++) row[c + i] = 1
-      break
-    }
-    return row
-  }
-
-  /** 긴 장애물: 방향 교대 — 왼쪽 또는 오른쪽에서 막고 반대편에 통로 */
-  private longObstacleRow(): Row {
-    const row = this.emptyRow()
-    const dir = this.lastLongDir === 'left' ? 'right' : 'left'
-    this.lastLongDir = dir
-    this.rowsSinceLong = 0
-
-    const gapSize = 2 + Math.floor(Math.random() * 2)  // 통로 2~3칸
-
-    if (dir === 'left') {
-      // 왼쪽에서 막기 → 오른쪽에 통로
-      const wallEnd = COLS - 1 - gapSize
-      for (let c = 1; c < wallEnd; c++) row[c] = 1
-    } else {
-      // 오른쪽에서 막기 → 왼쪽에 통로
-      const wallStart = 1 + gapSize
-      for (let c = wallStart; c < COLS - 1; c++) row[c] = 1
-    }
-    return row
-  }
-
-  // ── 유틸 ──────────────────────────────────────
-
-  private emptyRow(): Row {
-    const r = new Array(COLS).fill(0)
-    r[0] = 1; r[COLS - 1] = 1
-    return r
-  }
-
-  private openCols(row: Row): number[] {
-    return row.map((v,i) => v === 0 ? i : -1).filter(i => i > 0)
-  }
-
-  private renderRow(row: Row, gy: number) {
+  private renderRow(row: number[], gy: number) {
     this.walls.add(`-1,${gy}`)
     this.walls.add(`${COLS},${gy}`)
     for (let c = 0; c < COLS; c++) {
@@ -209,12 +73,6 @@ export class MapGenerator {
       ).setStrokeStyle(1, 0x1a4060, 1).setDepth(1)
       this.tiles.set(k, tile)
       this.walls.add(k)
-    }
-  }
-
-  private syncWalls() {
-    for (let i = 0; i < this.rows.length; i++) {
-      this.renderRow(this.rows[i], this.baseGY - i)
     }
   }
 }
