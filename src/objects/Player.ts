@@ -1,10 +1,10 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
-const MAX_SLIDE = 50
-export const SLIDE_SPEED_MIN = 50
-export const SLIDE_SPEED_PER_TILE = 5
-export const GRADIENT_FADE_DURATION = 200
+const MAX_SLIDE = 30
+export const SLIDE_SPEED_MIN = 60
+export const SLIDE_SPEED_PER_TILE = 25
+export const GRADIENT_FADE_DURATION = 120
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
 
@@ -24,6 +24,9 @@ export class Player {
   private isMoving = false
   private gradientGfx: Phaser.GameObjects.Graphics | null = null
   trailEffect: TrailEffect = 'box'
+
+  // 이동 완료 콜백
+  onArrived?: (gx: number, gy: number) => void
 
   gridX: number
   gridY: number
@@ -92,18 +95,13 @@ export class Player {
 
     if (this.trailEffect === 'gradient') {
       if (this.gradientGfx) {
-        const old = this.gradientGfx
-        this.gradientGfx = null
-        this.scene.tweens.add({
-          targets: old, alpha: 0, duration: GRADIENT_FADE_DURATION,
-          onComplete: () => old.destroy()
-        })
+        const old = this.gradientGfx; this.gradientGfx = null
+        this.scene.tweens.add({ targets: old, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => old.destroy() })
       }
       this.gradientGfx = this.scene.add.graphics().setDepth(9)
     }
 
-    const startX = this.rect.x
-    const startY = this.rect.y
+    const startX = this.rect.x, startY = this.rect.y
 
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
@@ -117,7 +115,7 @@ export class Player {
         } else {
           const ddx = this.rect.x - this.lastTrailPos.x
           const ddy = this.rect.y - this.lastTrailPos.y
-          if (Math.sqrt(ddx * ddx + ddy * ddy) > TILE * 0.3) {
+          if (Math.sqrt(ddx*ddx + ddy*ddy) > TILE * 0.3) {
             this.spawnTrailAt(this.lastTrailPos.x, this.lastTrailPos.y)
             this.lastTrailPos = { x: this.rect.x, y: this.rect.y }
           }
@@ -127,13 +125,11 @@ export class Player {
         this.gridX = nx; this.gridY = ny
         this.isMoving = false; this.currentTween = null
         if (this.gradientGfx) {
-          const g = this.gradientGfx
-          this.gradientGfx = null
-          this.scene.tweens.add({
-            targets: g, alpha: 0, duration: GRADIENT_FADE_DURATION,
-            onComplete: () => g.destroy()
-          })
+          const g = this.gradientGfx; this.gradientGfx = null
+          this.scene.tweens.add({ targets: g, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => g.destroy() })
         }
+        // 이동 완료 콜백
+        this.onArrived?.(this.gridX, this.gridY)
         if (this.nextMove) {
           const m = this.nextMove; this.nextMove = null
           this.slide(m.dx, m.dy)
@@ -142,80 +138,53 @@ export class Player {
     })
   }
 
-  private drawLiveGradient(
-    gfx: Phaser.GameObjects.Graphics,
-    sx: number, sy: number,
-    cx: number, cy: number,
-    dx: number, dy: number
-  ) {
+  private drawLiveGradient(gfx: Phaser.GameObjects.Graphics, sx: number, sy: number, cx: number, cy: number, dx: number, dy: number) {
     gfx.clear()
     const W = TILE - 4
-
     if (dx !== 0) {
-      const x1 = Math.min(sx, cx) - W / 2
-      const w = Math.abs(cx - sx) + W
-      if (dx > 0) {
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.7, 0, 0.7)
-      } else {
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0, 0.7, 0)
-      }
-      gfx.fillRect(x1, sy - W / 2, w, W)
+      const x1 = Math.min(sx, cx) - W/2, w = Math.abs(cx-sx) + W
+      if (dx > 0) gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0.7, 0, 0.7)
+      else        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0, 0.7, 0)
+      gfx.fillRect(x1, sy - W/2, w, W)
     } else {
-      const y1 = Math.min(sy, cy) - W / 2
-      const h = Math.abs(cy - sy) + W
-      if (dy < 0) {
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0.7, 0, 0)
-      } else {
-        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.7, 0.7)
-      }
-      gfx.fillRect(sx - W / 2, y1, W, h)
+      const y1 = Math.min(sy, cy) - W/2, h = Math.abs(cy-sy) + W
+      if (dy < 0) gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0.7, 0.7, 0, 0)
+      else        gfx.fillGradientStyle(0x00e5cc, 0x00e5cc, 0x00e5cc, 0x00e5cc, 0, 0, 0.7, 0.7)
+      gfx.fillRect(sx - W/2, y1, W, h)
     }
   }
 
   private spawnTrailAt(x: number, y: number) {
     switch (this.trailEffect) {
-      case 'box':   this.trailBox(x, y); break
+      case 'box': this.trailBox(x, y); break
       case 'spark': this.trailSpark(x, y); break
       case 'ghost': this.trailGhost(x, y); break
     }
   }
 
   private trailBox(x: number, y: number) {
-    const t = this.scene.add.rectangle(x, y, TILE - 8, TILE - 8, 0x00e5cc).setAlpha(0.45).setDepth(9)
+    const t = this.scene.add.rectangle(x, y, TILE-8, TILE-8, 0x00e5cc).setAlpha(0.45).setDepth(9)
     this.scene.tweens.add({ targets: t, alpha: 0, duration: 260, onComplete: () => t.destroy() })
   }
 
   private trailSpark(x: number, y: number) {
     for (let i = 0; i < 4; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const d = 4 + Math.random() * 8
+      const angle = Math.random() * Math.PI * 2, d = 4 + Math.random() * 8
       const p = this.scene.add.rectangle(x, y, 4, 4, 0x00e5cc).setAlpha(0.7).setDepth(9)
-      this.scene.tweens.add({
-        targets: p, x: x + Math.cos(angle) * d, y: y + Math.sin(angle) * d,
-        alpha: 0, scaleX: 0, scaleY: 0, duration: 200 + Math.random() * 100,
-        onComplete: () => p.destroy()
-      })
+      this.scene.tweens.add({ targets: p, x: x+Math.cos(angle)*d, y: y+Math.sin(angle)*d, alpha: 0, scaleX: 0, scaleY: 0, duration: 200+Math.random()*100, onComplete: () => p.destroy() })
     }
   }
 
   private trailGhost(x: number, y: number) {
-    const t = this.scene.add.rectangle(x, y, TILE - 2, TILE - 2, 0x00e5cc).setAlpha(0.22).setDepth(8)
-    this.scene.tweens.add({
-      targets: t, alpha: 0, scaleX: 1.4, scaleY: 1.4,
-      duration: 450, ease: 'Quad.easeOut', onComplete: () => t.destroy()
-    })
+    const t = this.scene.add.rectangle(x, y, TILE-2, TILE-2, 0x00e5cc).setAlpha(0.22).setDepth(8)
+    this.scene.tweens.add({ targets: t, alpha: 0, scaleX: 1.4, scaleY: 1.4, duration: 450, ease: 'Quad.easeOut', onComplete: () => t.destroy() })
   }
 
   private spawnHitEffect(wx: number, wy: number) {
     for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2
+      const angle = (i/6) * Math.PI * 2
       const p = this.scene.add.rectangle(wx, wy, 4, 4, 0x00e5cc).setDepth(11)
-      this.scene.tweens.add({
-        targets: p,
-        x: wx + Math.cos(angle) * 14, y: wy + Math.sin(angle) * 14,
-        alpha: 0, scaleX: 0, scaleY: 0, duration: 180, ease: 'Quad.easeOut',
-        onComplete: () => p.destroy()
-      })
+      this.scene.tweens.add({ targets: p, x: wx+Math.cos(angle)*14, y: wy+Math.sin(angle)*14, alpha: 0, scaleX: 0, scaleY: 0, duration: 180, ease: 'Quad.easeOut', onComplete: () => p.destroy() })
     }
   }
 
