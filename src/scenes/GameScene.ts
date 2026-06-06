@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser'
+import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
@@ -32,7 +32,6 @@ export class GameScene extends Phaser.Scene {
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x111318).setScrollFactor(0)
 
-    // 留??뚮몢由?
     const border = this.add.graphics().setScrollFactor(0).setDepth(20)
     border.lineStyle(1.5, 0x2a5080, 1)
     border.strokeRect(0, 0, MAP_W, height)
@@ -54,8 +53,6 @@ export class GameScene extends Phaser.Scene {
     this.deathZone = new DeathZone(this, dzStartY)
 
     this.createPauseBtn()
-
-    // DOM UI ?쒖떆
     showGameUI()
     updateScore(0)
     updateHeight(0)
@@ -74,8 +71,8 @@ export class GameScene extends Phaser.Scene {
     }
     draw(false)
 
-    this.add.text(bx, by, '??, {
-      fontSize: '14px', fontFamily: 'monospace', color: '#7799aa'
+    this.add.text(bx, by, '||', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#7799aa'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(23)
 
     const zone = this.add.zone(bx, by, bw, bh).setScrollFactor(0).setDepth(24).setInteractive({ useHandCursor: true })
@@ -88,7 +85,6 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // ESC濡쒕룄 ?쇱떆?뺤?
     this.input.keyboard?.on('keydown-ESC', () => {
       if (!this.isDead) {
         this.scene.launch('PauseScene')
@@ -108,7 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.mapGen.update(this.player.gridY)
     this.deathZone.update(delta)
 
-    const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE ))
+    const h = Math.max(0, Math.floor((this.startPlayerY - this.player.y) / TILE))
     updateScore(this.score)
     updateHeight(h)
 
@@ -122,4 +118,3 @@ export class GameScene extends Phaser.Scene {
     }
   }
 }
-
