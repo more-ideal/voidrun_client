@@ -3,6 +3,7 @@ import { TILE, COLS } from '../constants'
 
 const MAX_ATTEMPTS = 60
 const BUFFER_AHEAD = 28
+const MIN_LONG_GAP = 5   // 긴 장애물 사이 최소 빈 행 수
 
 type Row = number[]
 
@@ -74,6 +75,10 @@ export class MapGenerator {
   private baseGY = 0
   private tiles = new Map<string, Phaser.GameObjects.Rectangle>()
 
+  // 긴 장애물 상태 추적
+  private lastLongDir: 'left' | 'right' = 'right'  // 다음은 반대로
+  private rowsSinceLong = MIN_LONG_GAP              // 처음엔 바로 나올 수 있게
+
   constructor(
     private scene: Phaser.Scene,
     private walls: Set<string>
@@ -117,49 +122,57 @@ export class MapGenerator {
     if (!newRow) newRow = this.emptyRow()
     this.rows.push(newRow)
     this.renderRow(newRow, newGY)
+    this.rowsSinceLong++
   }
 
   // ── 행 종류 선택 ──────────────────────────────
 
   private makeRow(): Row {
+    const canLong = this.rowsSinceLong >= MIN_LONG_GAP
+
     const r = Math.random()
-    if (r < 0.45) return this.emptyRow()           // 45% 완전 빈 행
-    if (r < 0.75) return this.shortObstacleRow()   // 30% 짧은 장애물
-    return this.longObstacleRow()                   // 25% 긴 장애물 (tomb 스타일)
+
+    if (canLong && r < 0.2) {
+      // 20% 긴 장애물 (간격 조건 충족 시)
+      return this.longObstacleRow()
+    } else if (r < 0.55) {
+      // 55% 빈 행 (or 40% if long not available)
+      return this.emptyRow()
+    } else {
+      // 나머지 짧은 장애물
+      return this.shortObstacleRow()
+    }
   }
 
-  /** 짧은 장애물: 1~2개 클러스터 */
+  /** 짧은 장애물: 1~2칸 클러스터 1개 */
   private shortObstacleRow(): Row {
     const row = this.emptyRow()
-    const clusterCount = Math.random() < 0.5 ? 1 : 2
-    const used = new Set<number>()
-
-    for (let cl = 0; cl < clusterCount; cl++) {
-      // 배치 위치 랜덤 (단, 이미 사용된 곳 근처는 피함)
-      let tries = 0
-      while (tries++ < 20) {
-        const c = 1 + Math.floor(Math.random() * (COLS - 2))
-        if (used.has(c) || used.has(c-1) || used.has(c+1)) continue
-        // 1~2칸 클러스터
-        const size = Math.random() < 0.5 ? 1 : 2
-        for (let i = 0; i < size && c + i < COLS - 1; i++) {
-          row[c + i] = 1
-          used.add(c + i)
-        }
-        break
+    let tries = 0
+    while (tries++ < 20) {
+      const c = 2 + Math.floor(Math.random() * (COLS - 4))
+      // 1~2칸 클러스터
+      const size = Math.random() < 0.5 ? 1 : 2
+      let ok = true
+      for (let i = 0; i < size; i++) {
+        if (c + i >= COLS - 1 || row[c + i] !== 0) { ok = false; break }
       }
+      if (!ok) continue
+      for (let i = 0; i < size; i++) row[c + i] = 1
+      break
     }
     return row
   }
 
-  /** 긴 장애물: tomb of the mask 스타일 — 한쪽에서 길게 막고 반대편에 통로 */
+  /** 긴 장애물: 방향 교대 — 왼쪽 또는 오른쪽에서 막고 반대편에 통로 */
   private longObstacleRow(): Row {
     const row = this.emptyRow()
-    // 통로 너비: 2~3칸
-    const gapSize = 2 + Math.floor(Math.random() * 2)
-    const fromLeft = Math.random() < 0.5
+    const dir = this.lastLongDir === 'left' ? 'right' : 'left'
+    this.lastLongDir = dir
+    this.rowsSinceLong = 0
 
-    if (fromLeft) {
+    const gapSize = 2 + Math.floor(Math.random() * 2)  // 통로 2~3칸
+
+    if (dir === 'left') {
       // 왼쪽에서 막기 → 오른쪽에 통로
       const wallEnd = COLS - 1 - gapSize
       for (let c = 1; c < wallEnd; c++) row[c] = 1
