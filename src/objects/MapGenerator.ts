@@ -9,11 +9,11 @@ export class MapGenerator {
   private placedChunks = 0
   private baseGY = 0
   private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()
-  private wallSet = new Set<string>()  // 배치 확정된 벽 (렌더링용)
+  private wallSet = new Set<string>()
 
   constructor(
     private scene: Phaser.Scene,
-    private walls: Set<string>     // 물리 판정용
+    private walls: Set<string>
   ) {}
 
   init(playerStartGY: number) {
@@ -33,7 +33,6 @@ export class MapGenerator {
       if (chunkBottomGY > playerGY + PATTERN_HEIGHT) {
         gfx.destroy()
         this.chunkGfx.delete(idx)
-        // 해당 청크 벽 제거
         for (let r = 0; r < PATTERN_HEIGHT; r++) {
           const gy = chunkBottomGY - r
           this.walls.delete(`-1,${gy}`)
@@ -55,10 +54,10 @@ export class MapGenerator {
   }
 
   private placeChunk(pattern: number[][], chunkIdx: number) {
-    // 1단계: 벽 데이터 먼저 등록 (외곽선 계산에 필요)
+    // 패턴은 이미 뒤집어서 저장됨 — row 0이 게임 아래쪽
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
-      const row = pattern[PATTERN_HEIGHT - 1 - r]
+      const row = pattern[r]
       this.walls.add(`-1,${gy}`)
       this.walls.add(`${COLS},${gy}`)
       for (let c = 0; c < COLS; c++) {
@@ -69,13 +68,12 @@ export class MapGenerator {
       }
     }
 
-    // 2단계: 한 Graphics에 청크 전체 렌더링
     const gfx = this.scene.add.graphics().setDepth(1)
     this.chunkGfx.set(chunkIdx, gfx)
 
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
-      const row = pattern[PATTERN_HEIGHT - 1 - r]
+      const row = pattern[r]
       for (let c = 0; c < COLS; c++) {
         if (row[c] === 1) this.drawTile(gfx, c, gy)
       }
@@ -83,23 +81,14 @@ export class MapGenerator {
   }
 
   private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number) {
-    const x = c * TILE
-    const y = gy * TILE
-
-    // 채우기
+    const x = c * TILE, y = gy * TILE
     gfx.fillStyle(WALL_COLOR, 1)
     gfx.fillRect(x, y, TILE, TILE)
 
-    // 외곽선: 인접 벽이 없는 면만 그리기
     gfx.lineStyle(1.5, WALL_BORDER, 1)
-    const top    = !this.wallSet.has(`${c},${gy - 1}`)
-    const bottom = !this.wallSet.has(`${c},${gy + 1}`)
-    const left   = !this.wallSet.has(`${c - 1},${gy}`)
-    const right  = !this.wallSet.has(`${c + 1},${gy}`)
-
-    if (top)    { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x + TILE, y);        gfx.strokePath() }
-    if (bottom) { gfx.beginPath(); gfx.moveTo(x, y + TILE); gfx.lineTo(x + TILE, y + TILE); gfx.strokePath() }
-    if (left)   { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x, y + TILE);        gfx.strokePath() }
-    if (right)  { gfx.beginPath(); gfx.moveTo(x + TILE, y); gfx.lineTo(x + TILE, y + TILE); gfx.strokePath() }
+    if (!this.wallSet.has(`${c},${gy - 1}`)) { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x+TILE, y);        gfx.strokePath() }
+    if (!this.wallSet.has(`${c},${gy + 1}`)) { gfx.beginPath(); gfx.moveTo(x, y+TILE);   gfx.lineTo(x+TILE, y+TILE);   gfx.strokePath() }
+    if (!this.wallSet.has(`${c-1},${gy}`))   { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x, y+TILE);        gfx.strokePath() }
+    if (!this.wallSet.has(`${c+1},${gy}`))   { gfx.beginPath(); gfx.moveTo(x+TILE, y);   gfx.lineTo(x+TILE, y+TILE);   gfx.strokePath() }
   }
 }
