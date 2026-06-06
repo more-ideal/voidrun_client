@@ -1,9 +1,25 @@
 import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
-import { PATTERNS, PATTERN_HEIGHT, START_PATTERN_IDX } from './patterns'
+import patternData from '../data/patterns.json'
 
-const WALL_COLOR  = 0x0d2040
-const WALL_BORDER = 0x2a5080
+const PATTERN_HEIGHT = patternData.patterns[0].length
+const PATTERNS = patternData.patterns as number[][][]
+const START_IDX = patternData.startIdx
+
+const TILE_FILL: Record<number, number> = {
+  1: 0x0d2040,
+  2: 0x3d2a00,
+  3: 0x3a0000,
+  4: 0x1a0040,
+  5: 0x002020, 6: 0x002020, 7: 0x002020, 8: 0x002020,
+}
+const TILE_BORDER: Record<number, number> = {
+  1: 0x2a5080,
+  2: 0xf5a623,
+  3: 0xff4444,
+  4: 0x9966ff,
+  5: 0x00e5cc, 6: 0x00e5cc, 7: 0x00e5cc, 8: 0x00e5cc,
+}
 
 export class MapGenerator {
   private placedChunks = 0
@@ -19,7 +35,7 @@ export class MapGenerator {
   init(playerStartGY: number) {
     this.baseGY = playerStartGY
     this.placedChunks = 0
-    this.placeChunk(PATTERNS[START_PATTERN_IDX], 0)
+    this.placeChunk(PATTERNS[START_IDX], 0)
     this.placedChunks = 1
     for (let i = 0; i < 3; i++) this.addChunk()
   }
@@ -47,21 +63,20 @@ export class MapGenerator {
   }
 
   private addChunk() {
-    const available = PATTERNS.filter((_, i) => i !== START_PATTERN_IDX)
+    const available = PATTERNS.filter((_, i) => i !== START_IDX)
     const pattern = available[Math.floor(Math.random() * available.length)]
     this.placeChunk(pattern, this.placedChunks)
     this.placedChunks++
   }
 
   private placeChunk(pattern: number[][], chunkIdx: number) {
-    // 패턴은 이미 뒤집어서 저장됨 — row 0이 게임 아래쪽
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
       const row = pattern[r]
       this.walls.add(`-1,${gy}`)
       this.walls.add(`${COLS},${gy}`)
       for (let c = 0; c < COLS; c++) {
-        if (row[c] === 1) {
+        if (row[c] === 1 || row[c] === 3 || row[c] === 4) {
           this.walls.add(`${c},${gy}`)
           this.wallSet.add(`${c},${gy}`)
         }
@@ -75,20 +90,36 @@ export class MapGenerator {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
       const row = pattern[r]
       for (let c = 0; c < COLS; c++) {
-        if (row[c] === 1) this.drawTile(gfx, c, gy)
+        const t = row[c]
+        if (t > 0) this.drawTile(gfx, c, gy, t)
       }
     }
   }
 
-  private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number) {
+  private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number, type: number) {
     const x = c * TILE, y = gy * TILE
-    gfx.fillStyle(WALL_COLOR, 1)
+    const fill = TILE_FILL[type] ?? 0x0d2040
+    const border = TILE_BORDER[type] ?? 0x2a5080
+
+    gfx.fillStyle(fill, 1)
     gfx.fillRect(x, y, TILE, TILE)
 
-    gfx.lineStyle(1.5, WALL_BORDER, 1)
-    if (!this.wallSet.has(`${c},${gy - 1}`)) { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x+TILE, y);        gfx.strokePath() }
-    if (!this.wallSet.has(`${c},${gy + 1}`)) { gfx.beginPath(); gfx.moveTo(x, y+TILE);   gfx.lineTo(x+TILE, y+TILE);   gfx.strokePath() }
-    if (!this.wallSet.has(`${c-1},${gy}`))   { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x, y+TILE);        gfx.strokePath() }
-    if (!this.wallSet.has(`${c+1},${gy}`))   { gfx.beginPath(); gfx.moveTo(x+TILE, y);   gfx.lineTo(x+TILE, y+TILE);   gfx.strokePath() }
+    if (type === 1) {
+      gfx.lineStyle(1.5, border, 1)
+      if (!this.wallSet.has(`${c},${gy-1}`)) { gfx.beginPath(); gfx.moveTo(x,y); gfx.lineTo(x+TILE,y); gfx.strokePath() }
+      if (!this.wallSet.has(`${c},${gy+1}`)) { gfx.beginPath(); gfx.moveTo(x,y+TILE); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
+      if (!this.wallSet.has(`${c-1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x,y); gfx.lineTo(x,y+TILE); gfx.strokePath() }
+      if (!this.wallSet.has(`${c+1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x+TILE,y); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
+    } else {
+      gfx.lineStyle(1.5, border, 0.8)
+      gfx.strokeRect(x, y, TILE, TILE)
+    }
+
+    const arrows: Record<number, string> = {5:'↑',6:'↓',7:'←',8:'→'}
+    if (arrows[type]) {
+      this.scene.add.text(x+TILE/2, y+TILE/2, arrows[type], {
+        fontSize: '12px', fontFamily: 'monospace', color: '#00e5cc'
+      }).setOrigin(0.5).setDepth(2)
+    }
   }
 }
