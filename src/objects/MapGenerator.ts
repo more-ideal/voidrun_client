@@ -15,23 +15,15 @@ export class MapGenerator {
   init(playerStartGY: number) {
     this.baseGY = playerStartGY
     this.placedChunks = 0
-
-    // 시작 패턴 고정 배치
     this.placeChunk(PATTERNS[START_PATTERN_IDX], 0)
     this.placedChunks = 1
-
-    // 위로 3청크 미리 생성
     for (let i = 0; i < 3; i++) this.addChunk()
   }
 
   update(playerGY: number) {
-    // 플레이어 위치 기준 필요한 청크 수 계산
     const playerChunkIdx = Math.ceil((this.baseGY - playerGY) / PATTERN_HEIGHT)
-    while (this.placedChunks < playerChunkIdx + 3) {
-      this.addChunk()
-    }
+    while (this.placedChunks < playerChunkIdx + 3) this.addChunk()
 
-    // 아래 오래된 타일 정리
     for (const [k, tile] of this.tiles) {
       const gy = parseInt(k.split(',')[1])
       if (gy > playerGY + PATTERN_HEIGHT) {
@@ -40,8 +32,6 @@ export class MapGenerator {
     }
   }
 
-  // ── 청크 추가 (시작 패턴 제외 랜덤) ──
-
   private addChunk() {
     const available = PATTERNS.filter((_, i) => i !== START_PATTERN_IDX)
     const pattern = available[Math.floor(Math.random() * available.length)]
@@ -49,14 +39,12 @@ export class MapGenerator {
     this.placedChunks++
   }
 
-  // ── 청크 배치 ──
-  // row 0 = 패턴 위쪽 (gridY 작음)
-  // row PATTERN_HEIGHT-1 = 패턴 아래쪽 (gridY 큼)
-
   private placeChunk(pattern: number[][], chunkIdx: number) {
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
-      this.renderRow(pattern[r], gy)
+      // 패턴 뒤집기: row 0(에디터 위쪽) → 게임 아래쪽에 배치
+      const patternRow = pattern[PATTERN_HEIGHT - 1 - r]
+      this.renderRow(patternRow, gy)
     }
   }
 
