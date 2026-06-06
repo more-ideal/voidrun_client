@@ -11,8 +11,8 @@ export class MapGenerator {
   private baseGY = 0
   private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()
   private wallSet = new Set<string>()
-  private tileTypeMap = new Map<string, number>()  // 타일 타입 저장
-  private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()  // 타일별 오브젝트
+  private tileTypeMap = new Map<string, number>()
+  private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()
 
   constructor(
     private scene: Phaser.Scene,
@@ -76,7 +76,6 @@ export class MapGenerator {
   }
 
   private placeChunk(pattern: number[][], chunkIdx: number) {
-    // 벽 데이터 먼저 등록
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
       const row = pattern[r]
@@ -95,7 +94,6 @@ export class MapGenerator {
       }
     }
 
-    // 렌더링
     const gfx = this.scene.add.graphics().setDepth(1)
     this.chunkGfx.set(chunkIdx, gfx)
 
@@ -109,11 +107,7 @@ export class MapGenerator {
     }
   }
 
-  private drawTile(
-    gfx: Phaser.GameObjects.Graphics,
-    c: number, gy: number, type: number,
-    pattern: number[][], r: number
-  ) {
+  private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number, type: number, pattern: number[][], r: number) {
     const x = c * TILE, y = gy * TILE
     const k = `${c},${gy}`
     const objs: Phaser.GameObjects.GameObject[] = []
@@ -122,14 +116,13 @@ export class MapGenerator {
       case 1: this.drawWall(gfx, x, y, c, gy); break
       case 2: objs.push(...this.drawOrb(x, y)); break
       case 3: this.drawLaser(gfx, x, y, c, r, pattern); break
-      case 4: this.drawGlitch(x, y, objs); break
-      default: this.drawConveyor(x, y, type, objs); break
+      case 4: objs.push(...this.drawGlitch(x, y)); break
+      default: objs.push(...this.drawConveyor(x, y, type)); break
     }
 
     if (objs.length) this.tileObjects.set(k, objs)
   }
 
-  // 1: 벽 — 덩어리 외곽선
   private drawWall(gfx: Phaser.GameObjects.Graphics, x: number, y: number, c: number, gy: number) {
     gfx.fillStyle(0x0d2040, 1)
     gfx.fillRect(x, y, TILE, TILE)
@@ -140,84 +133,62 @@ export class MapGenerator {
     if (!this.wallSet.has(`${c+1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x+TILE,y); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
   }
 
-  // 2: 점수 오브 — 반짝이는 마름모
   private drawOrb(x: number, y: number): Phaser.GameObjects.GameObject[] {
-    const cx = x + TILE/2, cy = y + TILE/2
-    const gfx = this.scene.add.graphics().setDepth(3)
-    const r = TILE * 0.32
-    gfx.fillStyle(0xf5a623, 1)
-    gfx.fillTriangle(cx, cy-r, cx+r, cy, cx, cy+r)
-    gfx.fillTriangle(cx, cy-r, cx-r, cy, cx, cy+r)
-    gfx.lineStyle(1.5, 0xffd700, 1)
-    gfx.strokeTriangle(cx, cy-r, cx+r, cy, cx, cy+r)
-    gfx.strokeTriangle(cx, cy-r, cx-r, cy, cx, cy+r)
-    // 반짝임 tween
-    this.scene.tweens.add({
-      targets: gfx, alpha: 0.5, yoyo: true, repeat: -1, duration: 600
-    })
-    return [gfx]
+    const img = this.scene.add.image(x + TILE/2, y + TILE/2, 'orb')
+      .setDisplaySize(TILE - 4, TILE - 4).setDepth(3)
+    this.scene.tweens.add({ targets: img, alpha: 0.6, yoyo: true, repeat: -1, duration: 700 })
+    return [img]
   }
 
-  // 3: 레이저 — 다이아몬드 + 연속 시 선 연결
-  private drawLaser(
-    gfx: Phaser.GameObjects.Graphics,
-    x: number, y: number,
-    c: number, r: number, pattern: number[][]
-  ) {
-    const cx = x + TILE/2, cy = y + TILE/2
-    const s = TILE * 0.3
+  private drawLaser(gfx: Phaser.GameObjects.Graphics, x: number, y: number, c: number, r: number, pattern: number[][]) {
+    const cx = x + TILE/2, cy = y + TILE/2, s = TILE * 0.3
     gfx.fillStyle(0xff2255, 1)
     gfx.fillTriangle(cx, cy-s, cx+s, cy, cx, cy+s)
     gfx.fillTriangle(cx, cy-s, cx-s, cy, cx, cy+s)
     gfx.lineStyle(1, 0xff6680, 1)
     gfx.strokeTriangle(cx, cy-s, cx+s, cy, cx, cy+s)
     gfx.strokeTriangle(cx, cy-s, cx-s, cy, cx, cy+s)
-
-    // 오른쪽에 같은 레이저 있으면 연결선
     if (c+1 < COLS && r < pattern.length && pattern[r][c+1] === 3) {
       gfx.lineStyle(2, 0xff2255, 0.7)
       gfx.lineBetween(x+TILE, cy, x+TILE*2, cy)
     }
-    // 아래쪽에 같은 레이저 있으면 연결선
     if (r+1 < pattern.length && pattern[r+1][c] === 3) {
       gfx.lineStyle(2, 0xff2255, 0.7)
       gfx.lineBetween(cx, y+TILE, cx, y+TILE*2)
     }
   }
 
-  // 4: 글리치 벽 — 빨강+파랑 오프셋 테두리
-  private drawGlitch(x: number, y: number, objs: Phaser.GameObjects.GameObject[]) {
+  private drawGlitch(x: number, y: number): Phaser.GameObjects.GameObject[] {
     const gfx = this.scene.add.graphics().setDepth(2)
     gfx.fillStyle(0x1a0040, 1)
     gfx.fillRect(x, y, TILE, TILE)
-
-    const o = 2  // 오프셋
-    gfx.lineStyle(2, 0xff2255, 0.85)
+    const o = 2
+    gfx.lineStyle(2, 0xff2255, 0.9)
     gfx.strokeRect(x+o, y-o, TILE, TILE)
-    gfx.lineStyle(2, 0x00e5ff, 0.85)
+    gfx.lineStyle(2, 0x00e5ff, 0.9)
     gfx.strokeRect(x-o, y+o, TILE, TILE)
-
-    // 깜빡임
-    this.scene.tweens.add({
-      targets: gfx, alpha: 0.4, yoyo: true, repeat: -1,
-      duration: 500, ease: 'Stepped'
-    })
-    objs.push(gfx)
+    this.scene.tweens.add({ targets: gfx, alpha: 0.4, yoyo: true, repeat: -1, duration: 500 })
+    return [gfx]
   }
 
-  // 5~8: 컨베이어 벨트
-  private drawConveyor(x: number, y: number, type: number, objs: Phaser.GameObjects.GameObject[]) {
+  private drawConveyor(x: number, y: number, type: number): Phaser.GameObjects.GameObject[] {
+    const keys: Record<number, string> = {5:'up', 6:'down', 7:'left', 8:'right'}
+    const key = keys[type]
+    if (key && this.scene.textures.exists(key)) {
+      const img = this.scene.add.image(x + TILE/2, y + TILE/2, key)
+        .setDisplaySize(TILE, TILE).setDepth(2)
+      return [img]
+    }
+    // 폴백: 텍스트 화살표
     const gfx = this.scene.add.graphics().setDepth(1)
     gfx.fillStyle(0x112233, 1)
     gfx.fillRect(x, y, TILE, TILE)
     gfx.lineStyle(1, 0x00e5cc, 0.5)
     gfx.strokeRect(x, y, TILE, TILE)
-    objs.push(gfx)
-
-    const arrows: Record<number, string> = {5:'↑', 6:'↓', 7:'←', 8:'→'}
-    const txt = this.scene.add.text(x+TILE/2, y+TILE/2, arrows[type] ?? '?', {
+    const arrows: Record<number,string> = {5:'↑',6:'↓',7:'←',8:'→'}
+    const txt = this.scene.add.text(x+TILE/2, y+TILE/2, arrows[type]??'?', {
       fontSize: '13px', fontFamily: 'monospace', color: '#00e5cc'
     }).setOrigin(0.5).setDepth(2)
-    objs.push(txt)
+    return [gfx, txt]
   }
 }

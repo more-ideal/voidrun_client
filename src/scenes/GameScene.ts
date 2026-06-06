@@ -22,6 +22,14 @@ export class GameScene extends Phaser.Scene {
 
   constructor() { super('GameScene') }
 
+  preload() {
+    this.load.svg('orb',   '/assets/tiles/orb.svg',   { width: TILE, height: TILE })
+    this.load.svg('up',    '/assets/tiles/up.svg',    { width: TILE, height: TILE })
+    this.load.svg('down',  '/assets/tiles/down.svg',  { width: TILE, height: TILE })
+    this.load.svg('left',  '/assets/tiles/left.svg',  { width: TILE, height: TILE })
+    this.load.svg('right', '/assets/tiles/right.svg', { width: TILE, height: TILE })
+  }
+
   create() {
     const { width, height } = this.scale
     const settings = loadSettings()
@@ -46,7 +54,6 @@ export class GameScene extends Phaser.Scene {
     )
     this.startPlayerY = this.player.y
 
-    // 이동 완료 시 타일 처리
     this.player.onArrived = (gx, gy) => this.handleTileArrival(gx, gy)
 
     this.cameras.main.startFollow(this.player.getRect(), true, 0.08, 0.08)
@@ -64,12 +71,12 @@ export class GameScene extends Phaser.Scene {
   private handleTileArrival(gx: number, gy: number) {
     const type = this.mapGen.getTileType(gx, gy)
     switch (type) {
-      case 2:  // 점수 오브
+      case 2:
         this.score += ORB_SCORE
         this.mapGen.removeTile(gx, gy)
         this.spawnOrbEffect(gx, gy)
         break
-      case 3:  // 레이저 (가시)
+      case 3:
         if (!this.isDead) {
           this.isDead = true
           this.cameras.main.flash(200, 255, 30, 30)
@@ -86,7 +93,6 @@ export class GameScene extends Phaser.Scene {
   private spawnOrbEffect(gx: number, gy: number) {
     const x = gx * TILE + TILE / 2
     const y = gy * TILE + TILE / 2
-    // 점수 텍스트 팝업
     const txt = this.add.text(x, y, `+${ORB_SCORE}`, {
       fontSize: '14px', fontFamily: 'monospace', color: '#f5a623', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(15)
