@@ -2,14 +2,18 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import { PATTERNS, PATTERN_HEIGHT, START_PATTERN_IDX } from './patterns'
 
+const WALL_COLOR  = 0x0d2040
+const WALL_BORDER = 0x2a5080
+
 export class MapGenerator {
   private placedChunks = 0
   private baseGY = 0
-  private tiles = new Map<string, Phaser.GameObjects.Rectangle>()
+  private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()
+  private wallSet = new Set<string>()  // 배치 확정된 벽 (렌더링용)
 
   constructor(
     private scene: Phaser.Scene,
-    private walls: Set<string>
+    private walls: Set<string>     // 물리 판정용
   ) {}
 
   init(playerStartGY: number) {
@@ -24,10 +28,21 @@ export class MapGenerator {
     const playerChunkIdx = Math.ceil((this.baseGY - playerGY) / PATTERN_HEIGHT)
     while (this.placedChunks < playerChunkIdx + 3) this.addChunk()
 
-    for (const [k, tile] of this.tiles) {
-      const gy = parseInt(k.split(',')[1])
-      if (gy > playerGY + PATTERN_HEIGHT) {
-        tile.destroy(); this.tiles.delete(k); this.walls.delete(k)
+    for (const [idx, gfx] of this.chunkGfx) {
+      const chunkBottomGY = this.baseGY - idx * PATTERN_HEIGHT
+      if (chunkBottomGY > playerGY + PATTERN_HEIGHT) {
+        gfx.destroy()
+        this.chunkGfx.delete(idx)
+        // 해당 청크 벽 제거
+        for (let r = 0; r < PATTERN_HEIGHT; r++) {
+          const gy = chunkBottomGY - r
+          this.walls.delete(`-1,${gy}`)
+          this.walls.delete(`${COLS},${gy}`)
+          for (let c = 0; c < COLS; c++) {
+            this.walls.delete(`${c},${gy}`)
+            this.wallSet.delete(`${c},${gy}`)
+          }
+        }
       }
     }
   }
@@ -40,27 +55,51 @@ export class MapGenerator {
   }
 
   private placeChunk(pattern: number[][], chunkIdx: number) {
+    // 1단계: 벽 데이터 먼저 등록 (외곽선 계산에 필요)
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
-      // 패턴 뒤집기: row 0(에디터 위쪽) → 게임 아래쪽에 배치
-      const patternRow = pattern[PATTERN_HEIGHT - 1 - r]
-      this.renderRow(patternRow, gy)
+      const row = pattern[PATTERN_HEIGHT - 1 - r]
+      this.walls.add(`-1,${gy}`)
+      this.walls.add(`${COLS},${gy}`)
+      for (let c = 0; c < COLS; c++) {
+        if (row[c] === 1) {
+          this.walls.add(`${c},${gy}`)
+          this.wallSet.add(`${c},${gy}`)
+        }
+      }
+    }
+
+    // 2단계: 한 Graphics에 청크 전체 렌더링
+    const gfx = this.scene.add.graphics().setDepth(1)
+    this.chunkGfx.set(chunkIdx, gfx)
+
+    for (let r = 0; r < PATTERN_HEIGHT; r++) {
+      const gy = this.baseGY - chunkIdx * PATTERN_HEIGHT - r
+      const row = pattern[PATTERN_HEIGHT - 1 - r]
+      for (let c = 0; c < COLS; c++) {
+        if (row[c] === 1) this.drawTile(gfx, c, gy)
+      }
     }
   }
 
-  private renderRow(row: number[], gy: number) {
-    this.walls.add(`-1,${gy}`)
-    this.walls.add(`${COLS},${gy}`)
-    for (let c = 0; c < COLS; c++) {
-      if (row[c] !== 1) continue
-      const k = `${c},${gy}`
-      if (this.tiles.has(k)) continue
-      const tile = this.scene.add.rectangle(
-        c * TILE + TILE / 2, gy * TILE + TILE / 2,
-        TILE - 2, TILE - 2, 0x0d2040
-      ).setStrokeStyle(1, 0x1a4060, 1).setDepth(1)
-      this.tiles.set(k, tile)
-      this.walls.add(k)
-    }
+  private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number) {
+    const x = c * TILE
+    const y = gy * TILE
+
+    // 채우기
+    gfx.fillStyle(WALL_COLOR, 1)
+    gfx.fillRect(x, y, TILE, TILE)
+
+    // 외곽선: 인접 벽이 없는 면만 그리기
+    gfx.lineStyle(1.5, WALL_BORDER, 1)
+    const top    = !this.wallSet.has(`${c},${gy - 1}`)
+    const bottom = !this.wallSet.has(`${c},${gy + 1}`)
+    const left   = !this.wallSet.has(`${c - 1},${gy}`)
+    const right  = !this.wallSet.has(`${c + 1},${gy}`)
+
+    if (top)    { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x + TILE, y);        gfx.strokePath() }
+    if (bottom) { gfx.beginPath(); gfx.moveTo(x, y + TILE); gfx.lineTo(x + TILE, y + TILE); gfx.strokePath() }
+    if (left)   { gfx.beginPath(); gfx.moveTo(x, y);        gfx.lineTo(x, y + TILE);        gfx.strokePath() }
+    if (right)  { gfx.beginPath(); gfx.moveTo(x + TILE, y); gfx.lineTo(x + TILE, y + TILE); gfx.strokePath() }
   }
 }

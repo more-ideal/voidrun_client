@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+﻿import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import { Player } from '../objects/Player'
 import { MapGenerator } from '../objects/MapGenerator'
@@ -30,9 +30,9 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, -99999, MAP_W, 99999 + height)
 
-    this.add.rectangle(width / 2, height / 2, width, height, 0x080810).setScrollFactor(0)
+    this.add.rectangle(width / 2, height / 2, width, height, 0x111318).setScrollFactor(0)
 
-    // 맵 테두리
+    // 留??뚮몢由?
     const border = this.add.graphics().setScrollFactor(0).setDepth(20)
     border.lineStyle(1.5, 0x2a5080, 1)
     border.strokeRect(0, 0, MAP_W, height)
@@ -55,7 +55,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createPauseBtn()
 
-    // DOM UI 표시
+    // DOM UI ?쒖떆
     showGameUI()
     updateScore(0)
     updateHeight(0)
@@ -74,7 +74,7 @@ export class GameScene extends Phaser.Scene {
     }
     draw(false)
 
-    this.add.text(bx, by, '⏸', {
+    this.add.text(bx, by, '??, {
       fontSize: '14px', fontFamily: 'monospace', color: '#7799aa'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(23)
 
@@ -88,7 +88,7 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // ESC로도 일시정지
+    // ESC濡쒕룄 ?쇱떆?뺤?
     this.input.keyboard?.on('keydown-ESC', () => {
       if (!this.isDead) {
         this.scene.launch('PauseScene')
@@ -122,3 +122,4 @@ export class GameScene extends Phaser.Scene {
     }
   }
 }
+

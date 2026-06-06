@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+﻿import Phaser from 'phaser'
 import { MainScene } from './scenes/MainScene'
 import { GameScene } from './scenes/GameScene'
 import { GameOverScene } from './scenes/GameOverScene'
@@ -7,7 +7,7 @@ import { SettingsScene } from './scenes/SettingsScene'
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  backgroundColor: '#080810',
+  backgroundColor: '#111318',
   parent: 'game',
   scale: {
     mode: Phaser.Scale.FIT,
@@ -23,3 +23,4 @@ const config: Phaser.Types.Core.GameConfig = {
 }
 
 new Phaser.Game(config)
+
