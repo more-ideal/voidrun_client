@@ -86,7 +86,8 @@ export class MapGenerator {
         if (t > 0) {
           const k = `${c},${gy}`
           this.tileTypeMap.set(k, t)
-          if (t === 1 || t === 3 || t === 4) {
+          // 1(벽), 4(글리치)만 물리 벽 — 레이저(3)는 통과 가능하게 (지나칠 때 게임오버)
+          if (t === 1 || t === 4) {
             this.walls.add(k)
             this.wallSet.add(k)
           }
@@ -179,7 +180,6 @@ export class MapGenerator {
         .setDisplaySize(TILE, TILE).setDepth(2)
       return [img]
     }
-    // 폴백: 텍스트 화살표
     const gfx = this.scene.add.graphics().setDepth(1)
     gfx.fillStyle(0x112233, 1)
     gfx.fillRect(x, y, TILE, TILE)

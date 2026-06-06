@@ -2,8 +2,8 @@ import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 
 const MAX_SLIDE = 30
-export const SLIDE_SPEED_MIN = 40
-export const SLIDE_SPEED_PER_TILE = 14  // 속도 복구
+export const SLIDE_SPEED_MIN = 50
+export const SLIDE_SPEED_PER_TILE = 20  // 속도 약간 줄임
 export const GRADIENT_FADE_DURATION = 120
 
 export type TrailEffect = 'box' | 'gradient' | 'spark' | 'ghost'
@@ -25,8 +25,6 @@ export class Player {
   private gradientGfx: Phaser.GameObjects.Graphics | null = null
 
   trailEffect: TrailEffect = 'box'
-
-  // 지나치는 모든 그리드에서 호출
   onPassThrough?: (gx: number, gy: number) => void
 
   gridX: number
@@ -94,6 +92,13 @@ export class Player {
     const dist = Math.abs(nx - this.gridX) + Math.abs(ny - this.gridY)
     const duration = Math.max(SLIDE_SPEED_MIN, dist * SLIDE_SPEED_PER_TILE)
 
+    // 경로상 모든 그리드 좌표를 미리 계산
+    const pathCoords: { gx: number, gy: number }[] = []
+    for (let s = 1; s <= dist; s++) {
+      pathCoords.push({ gx: this.gridX + dx * s, gy: this.gridY + dy * s })
+    }
+    let pathIdx = 0
+
     if (this.trailEffect === 'gradient') {
       if (this.gradientGfx) {
         const old = this.gradientGfx; this.gradientGfx = null
@@ -104,10 +109,6 @@ export class Player {
 
     const startX = this.rect.x, startY = this.rect.y
 
-    // 경로상 그리드 추적용
-    let lastCheckedGX = this.gridX
-    let lastCheckedGY = this.gridY
-
     this.currentTween = this.scene.tweens.add({
       targets: this.rect,
       x: nx * TILE + TILE / 2,
@@ -115,13 +116,12 @@ export class Player {
       duration,
       ease: 'Quad.easeOut',
       onUpdate: () => {
-        // 경로상 지나치는 그리드 체크
-        const curGX = Math.round((this.rect.x - TILE / 2) / TILE)
-        const curGY = Math.round((this.rect.y - TILE / 2) / TILE)
-        if (curGX !== lastCheckedGX || curGY !== lastCheckedGY) {
-          lastCheckedGX = curGX
-          lastCheckedGY = curGY
-          this.onPassThrough?.(curGX, curGY)
+        // 이동 거리 기반으로 경로 순서대로 처리 (easeOut 무관하게 안정적)
+        const traveled = Math.abs(this.rect.x - startX) + Math.abs(this.rect.y - startY)
+        const gridsPassed = Math.floor(traveled / TILE)
+        while (pathIdx < Math.min(gridsPassed + 1, pathCoords.length)) {
+          this.onPassThrough?.(pathCoords[pathIdx].gx, pathCoords[pathIdx].gy)
+          pathIdx++
         }
 
         // 잔상
@@ -143,8 +143,11 @@ export class Player {
           const g = this.gradientGfx; this.gradientGfx = null
           this.scene.tweens.add({ targets: g, alpha: 0, duration: GRADIENT_FADE_DURATION, onComplete: () => g.destroy() })
         }
-        // 최종 도착 위치도 체크
-        this.onPassThrough?.(this.gridX, this.gridY)
+        // 마지막 남은 경로 처리
+        while (pathIdx < pathCoords.length) {
+          this.onPassThrough?.(pathCoords[pathIdx].gx, pathCoords[pathIdx].gy)
+          pathIdx++
+        }
         if (this.nextMove) {
           const m = this.nextMove; this.nextMove = null
           this.slide(m.dx, m.dy)
