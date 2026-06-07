@@ -1,4 +1,4 @@
-import Phaser from 'phaser'
+﻿import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import patternData from '../data/patterns.json'
 
@@ -241,12 +241,12 @@ export class MapGenerator {
   // 빈 공간에 오브/레이저 랜덤 배치
   private addSpecialTiles(row: Row, gy: number) {
     const depth = this.totalRowsGenerated
-    for (let c = 1; c < COLS - 1; c++) {
       if (row[c] !== 0) continue
-      const rnd = Math.random()
-      let type = 0
-      if (rnd < 0.07) type = 2               // 점수 오브 7%
-      else if (rnd < 0.09 && depth > 10) type = 3  // 레이저 2% (10행 이후)
+      const type = 2  // 모든 빈 칸에 오브
+      
+      
+      
+      // else if (rnd < 0.09 && depth > 10) type = 3  // 레이저 2% (10행 이후)
       if (!type) continue
       const k = `${c},${gy}`
       this.tileTypeMap.set(k, type)
@@ -302,8 +302,8 @@ export class MapGenerator {
     if (!this.wallSet.has(`${c+1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x+TILE,y); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
   }
 
-  private drawOrb(x: number, y: number): Phaser.GameObjects.GameObject[] {
-    const img = this.scene.add.image(x+TILE/2,y+TILE/2,'orb').setDisplaySize(TILE-4,TILE-4).setDepth(3)
+    const img = this.scene.add.image(x+TILE/2,y+TILE/2,'orb').setDisplaySize(TILE-4,TILE-4).setAlpha(0.8).setDepth(3)
+    this.scene.tweens.add({ targets:img, alpha:0.6, yoyo:true, repeat:-1, duration:700 })
     this.scene.tweens.add({ targets:img, alpha:0.6, yoyo:true, repeat:-1, duration:700 })
     return [img]
   }
