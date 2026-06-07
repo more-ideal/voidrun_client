@@ -56,6 +56,37 @@ function canReachTop(rows: Row[], start: {r:number,c:number}): boolean {
   return nodes.every(({r,c})=>upOK.has(key(r,c)))
 }
 
+// 친구 로직: 랜덤 행 생성
+function randomRow(): Row {
+  const row = new Array(COLS).fill(0)
+  row[0] = 1; row[COLS-1] = 1
+  const wallCount = 2 + Math.floor(Math.random() * 3)
+  let placed = 0, guard = 0
+  while (placed < wallCount && guard++ < (COLS-2)*5) {
+    const c = 1 + Math.floor(Math.random() * (COLS-2))
+    if (row[c] !== 0) continue
+    row[c] = 1; placed++
+    if (placed < wallCount && Math.random() < 0.5) {
+      const nc = c + (Math.random() < 0.5 ? 1 : -1)
+      if (nc >= 1 && nc < COLS-1 && row[nc] === 0) { row[nc] = 1; placed++ }
+    }
+  }
+  // 연속 빈칸 제한
+  let run = 0, runStart = -1
+  const r = [...row]
+  for (let c = 0; c < COLS; c++) {
+    if (r[c] === 0) {
+      if (run === 0) runStart = c
+      run++
+      if (run > MAX_CLEAR_RUN) {
+        const mid = runStart + Math.floor(run/2)
+        if (mid >= 1 && mid < COLS-1) { r[mid]=1; run=0; runStart=-1; c=mid }
+      }
+    } else { run=0; runStart=-1 }
+  }
+  return r
+}
+
 export class MapGenerator {
   private baseGY = 0
   private rows: Row[] = []
@@ -65,9 +96,6 @@ export class MapGenerator {
   private wallSet = new Set<string>()
   private tileTypeMap = new Map<string, number>()
   private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()
-
-  private lastLongDir: 'left'|'right' = 'right'
-  private rowsSinceLong = MIN_LONG_GAP
   private totalRowsGenerated = 0
 
   constructor(
@@ -78,8 +106,7 @@ export class MapGenerator {
   init(playerStartGY: number) {
     this.baseGY = playerStartGY
     this.placeStartPattern()
-    const patternTopGY = this.baseGY - PATTERN_HEIGHT
-    this.baseRowGY = patternTopGY - 1
+    this.baseRowGY = this.baseGY - PATTERN_HEIGHT - 1
     this.rows = [this.emptyWallRow()]
     this.syncRow(0)
     for (let i = 0; i < BUFFER_AHEAD; i++) this.addRow()
@@ -101,10 +128,8 @@ export class MapGenerator {
       }
     }
     for (const [idx, gfx] of this.chunkGfx) {
-      if (idx === 0) {
-        if (this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
-          gfx.destroy(); this.chunkGfx.delete(idx)
-        }
+      if (idx === 0 && this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
+        gfx.destroy(); this.chunkGfx.delete(idx)
       }
     }
   }
@@ -145,7 +170,7 @@ export class MapGenerator {
 
     let newRow: Row | null = null
     for (let attempt = 0; attempt < 80; attempt++) {
-      const candidate = this.generateRow()
+      const candidate = randomRow()
       if (canReachTop([...this.rows, candidate], start)) {
         newRow = candidate; break
       }
@@ -153,61 +178,9 @@ export class MapGenerator {
     if (!newRow) newRow = this.emptyWallRow()
 
     this.rows.push(newRow)
-    this.rowsSinceLong++
     this.totalRowsGenerated++
     this.syncRow(this.rows.length - 1)
     this.addSpecialTiles(newRow, newGY)
-  }
-
-  private generateRow(): Row {
-    const canLong = this.rowsSinceLong >= MIN_LONG_GAP
-    const r = Math.random()
-    if (canLong && r < 0.22) return this.longObstacleRow()
-    if (r < 0.55) return this.emptyWallRow()
-    return this.shortObstacleRow()
-  }
-
-  private shortObstacleRow(): Row {
-    const row = this.emptyWallRow()
-    let tries = 0
-    while (tries++ < 20) {
-      const c = 2 + Math.floor(Math.random() * (COLS - 4))
-      const size = Math.random() < 0.5 ? 1 : 2
-      let ok = true
-      for (let i = 0; i < size; i++) if (c+i>=COLS-1||row[c+i]) { ok=false; break }
-      if (!ok) continue
-      for (let i = 0; i < size; i++) row[c+i] = 1
-      break
-    }
-    return this.enforceMaxRun(row)
-  }
-
-  private longObstacleRow(): Row {
-    const row = this.emptyWallRow()
-    const dir = this.lastLongDir === 'left' ? 'right' : 'left'
-    this.lastLongDir = dir
-    this.rowsSinceLong = 0
-    const gap = 2 + Math.floor(Math.random() * 2)
-    if (dir === 'left') {
-      for (let c = 1; c < COLS - 1 - gap; c++) row[c] = 1
-    } else {
-      for (let c = 1 + gap; c < COLS - 1; c++) row[c] = 1
-    }
-    return row
-  }
-
-  private enforceMaxRun(row: Row): Row {
-    const r = [...row]; let run = 0, start = -1
-    for (let c = 0; c < COLS; c++) {
-      if (!r[c]) {
-        if (!run) start = c; run++
-        if (run > MAX_CLEAR_RUN) {
-          const mid = start + Math.floor(run/2)
-          if (mid>=1&&mid<COLS-1) { r[mid]=1; run=0; start=-1; c=mid }
-        }
-      } else { run=0; start=-1 }
-    }
-    return r
   }
 
   private emptyWallRow(): Row {
@@ -219,18 +192,12 @@ export class MapGenerator {
     return row.map((v,i)=>v===0?i:-1).filter(i=>i>0)
   }
 
-  // 빈 칸 전부 오브 배치
   private addSpecialTiles(row: Row, gy: number) {
-    const gfx = this.chunkGfx.get(-1) ?? (() => {
-      const g = this.scene.add.graphics().setDepth(1)
-      this.chunkGfx.set(-1, g); return g
-    })()
-    for (let c = 1; c < COLS - 1; c++) {
+    for (let c = 1; c < COLS-1; c++) {
       if (row[c] !== 0) continue
       const k = `${c},${gy}`
       this.tileTypeMap.set(k, 2)
-      const objs = this.drawOrb(c * TILE, gy * TILE)
-      this.tileObjects.set(k, objs)
+      this.tileObjects.set(k, this.drawOrb(c*TILE, gy*TILE))
     }
   }
 
@@ -238,17 +205,21 @@ export class MapGenerator {
     const gy = this.baseRowGY - idx
     const row = this.rows[idx]
     this.walls.add(`-1,${gy}`); this.walls.add(`${COLS},${gy}`)
-    const gfx = this.chunkGfx.get(-1) ?? (() => {
-      const g = this.scene.add.graphics().setDepth(1)
-      this.chunkGfx.set(-1, g); return g
-    })()
+    const gfx = this.getAutoGfx()
     for (let c = 0; c < COLS; c++) {
       if (!row[c]) continue
       const k = `${c},${gy}`
       this.tileTypeMap.set(k, 1)
       this.walls.add(k); this.wallSet.add(k)
-      this.drawWall(gfx, c * TILE, gy * TILE, c, gy)
+      this.drawWall(gfx, c*TILE, gy*TILE, c, gy)
     }
+  }
+
+  private getAutoGfx(): Phaser.GameObjects.Graphics {
+    return this.chunkGfx.get(-1) ?? (() => {
+      const g = this.scene.add.graphics().setDepth(1)
+      this.chunkGfx.set(-1, g); return g
+    })()
   }
 
   private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number, type: number, pattern: number[][], r: number) {
@@ -272,8 +243,9 @@ export class MapGenerator {
   }
 
   private drawOrb(x: number, y: number): Phaser.GameObjects.GameObject[] {
+    const size = (TILE-4) * 0.5
     const img = this.scene.add.image(x+TILE/2, y+TILE/2, 'orb')
-      .setDisplaySize(TILE-4, TILE-4).setAlpha(0.8).setDepth(3)
+      .setDisplaySize(size, size).setAlpha(0.8).setDepth(3)
     this.scene.tweens.add({ targets: img, alpha: 0.6, yoyo: true, repeat: -1, duration: 700 })
     return [img]
   }
