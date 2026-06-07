@@ -1,15 +1,13 @@
-﻿import Phaser from 'phaser'
+import Phaser from 'phaser'
 import { TILE, COLS } from '../constants'
 import patternData from '../data/patterns.json'
 
-// ── 상수 ────────────────────────────────────────
 const PATTERN_HEIGHT = patternData.patterns[0].length
 const START_PATTERN = patternData.patterns[patternData.startIdx] as number[][]
 const BUFFER_AHEAD = 30
-const MIN_LONG_GAP = 5    // 긴 장애물 최소 간격
-const MAX_CLEAR_RUN = 6   // 연속 빈칸 최대
+const MIN_LONG_GAP = 5
+const MAX_CLEAR_RUN = 6
 
-// ── 슬라이딩 물리 (canReachTop용) ──────────────
 type Row = number[]
 
 function slideStop(rows: Row[], sr: number, sc: number, dr: number, dc: number) {
@@ -58,14 +56,12 @@ function canReachTop(rows: Row[], start: {r:number,c:number}): boolean {
   return nodes.every(({r,c})=>upOK.has(key(r,c)))
 }
 
-// ── 맵 생성기 ───────────────────────────────────
-
 export class MapGenerator {
   private baseGY = 0
-  private rows: Row[] = []          // 자동생성 행 배열 (rows[0]=가장 아래)
-  private baseRowGY = 0             // rows[0]의 gridY
+  private rows: Row[] = []
+  private baseRowGY = 0
 
-  private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()  // 패턴 청크
+  private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()
   private wallSet = new Set<string>()
   private tileTypeMap = new Map<string, number>()
   private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()
@@ -81,41 +77,32 @@ export class MapGenerator {
 
   init(playerStartGY: number) {
     this.baseGY = playerStartGY
-
-    // 시작 패턴 (JSON)
     this.placeStartPattern()
-
-    // 자동 생성 행 기반 영역 초기화
     const patternTopGY = this.baseGY - PATTERN_HEIGHT
     this.baseRowGY = patternTopGY - 1
-    this.rows = [this.emptyWallRow()]   // rows[0] = 시작 행
+    this.rows = [this.emptyWallRow()]
     this.syncRow(0)
-
     for (let i = 0; i < BUFFER_AHEAD; i++) this.addRow()
   }
 
   update(playerGY: number) {
-    // 필요한 만큼 행 추가
     const playerRowIdx = this.baseRowGY - playerGY
     const ahead = this.rows.length - 1 - playerRowIdx
     for (let i = ahead; i < BUFFER_AHEAD; i++) this.addRow()
 
-    // 오래된 타일 제거
-    for (const [k, tile] of this.tileObjects) {
+    for (const [k, objs] of this.tileObjects) {
       const gy = parseInt(k.split(',')[1])
       if (gy > playerGY + PATTERN_HEIGHT + 5) {
-        tile.forEach(o => o.destroy())
+        objs.forEach(o => o.destroy())
         this.tileObjects.delete(k)
         this.tileTypeMap.delete(k)
         this.walls.delete(k)
         this.wallSet.delete(k)
       }
     }
-    // 패턴 청크 제거
     for (const [idx, gfx] of this.chunkGfx) {
       if (idx === 0) {
-        const bottomGY = this.baseGY
-        if (bottomGY > playerGY + PATTERN_HEIGHT + 5) {
+        if (this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
           gfx.destroy(); this.chunkGfx.delete(idx)
         }
       }
@@ -134,12 +121,9 @@ export class MapGenerator {
     this.walls.delete(k); this.wallSet.delete(k)
   }
 
-  // ── 시작 패턴 배치 ──────────────────────────
-
   private placeStartPattern() {
     const gfx = this.scene.add.graphics().setDepth(1)
     this.chunkGfx.set(0, gfx)
-
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - r
       const row = START_PATTERN[r]
@@ -153,8 +137,6 @@ export class MapGenerator {
       }
     }
   }
-
-  // ── 자동 행 추가 ────────────────────────────
 
   private addRow() {
     const newGY = this.baseRowGY - this.rows.length
@@ -173,7 +155,6 @@ export class MapGenerator {
     this.rows.push(newRow)
     this.rowsSinceLong++
     this.totalRowsGenerated++
-
     this.syncRow(this.rows.length - 1)
     this.addSpecialTiles(newRow, newGY)
   }
@@ -182,7 +163,7 @@ export class MapGenerator {
     const canLong = this.rowsSinceLong >= MIN_LONG_GAP
     const r = Math.random()
     if (canLong && r < 0.22) return this.longObstacleRow()
-    if (r < 0.55)            return this.emptyWallRow()
+    if (r < 0.55) return this.emptyWallRow()
     return this.shortObstacleRow()
   }
 
@@ -238,30 +219,20 @@ export class MapGenerator {
     return row.map((v,i)=>v===0?i:-1).filter(i=>i>0)
   }
 
-  // 빈 공간에 오브/레이저 랜덤 배치
+  // 빈 칸 전부 오브 배치
   private addSpecialTiles(row: Row, gy: number) {
-    const depth = this.totalRowsGenerated
+    const gfx = this.chunkGfx.get(-1) ?? (() => {
+      const g = this.scene.add.graphics().setDepth(1)
+      this.chunkGfx.set(-1, g); return g
+    })()
+    for (let c = 1; c < COLS - 1; c++) {
       if (row[c] !== 0) continue
-      const type = 2  // 모든 빈 칸에 오브
-      
-      
-      
-      // else if (rnd < 0.09 && depth > 10) type = 3  // 레이저 2% (10행 이후)
-      if (!type) continue
       const k = `${c},${gy}`
-      this.tileTypeMap.set(k, type)
-      const objs: Phaser.GameObjects.GameObject[] = []
-      const gfx = this.chunkGfx.get(-1) ?? (() => {
-        const g = this.scene.add.graphics().setDepth(1)
-        this.chunkGfx.set(-1, g); return g
-      })()
-      if (type === 2) objs.push(...this.drawOrb(c * TILE, gy * TILE))
-      if (type === 3) this.drawLaser(gfx, c * TILE, gy * TILE, c, row)
-      if (objs.length) this.tileObjects.set(k, objs)
+      this.tileTypeMap.set(k, 2)
+      const objs = this.drawOrb(c * TILE, gy * TILE)
+      this.tileObjects.set(k, objs)
     }
   }
-
-  // ── 행 등록 (walls / wallSet) ───────────────
 
   private syncRow(idx: number) {
     const gy = this.baseRowGY - idx
@@ -276,11 +247,9 @@ export class MapGenerator {
       const k = `${c},${gy}`
       this.tileTypeMap.set(k, 1)
       this.walls.add(k); this.wallSet.add(k)
-      this.drawTile(gfx, c, gy, 1, [row], 0)
+      this.drawWall(gfx, c * TILE, gy * TILE, c, gy)
     }
   }
-
-  // ── 렌더링 ──────────────────────────────────
 
   private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number, type: number, pattern: number[][], r: number) {
     const x = c*TILE, y = gy*TILE
@@ -302,9 +271,10 @@ export class MapGenerator {
     if (!this.wallSet.has(`${c+1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x+TILE,y); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
   }
 
-    const img = this.scene.add.image(x+TILE/2,y+TILE/2,'orb').setDisplaySize(TILE-4,TILE-4).setAlpha(0.8).setDepth(3)
-    this.scene.tweens.add({ targets:img, alpha:0.6, yoyo:true, repeat:-1, duration:700 })
-    this.scene.tweens.add({ targets:img, alpha:0.6, yoyo:true, repeat:-1, duration:700 })
+  private drawOrb(x: number, y: number): Phaser.GameObjects.GameObject[] {
+    const img = this.scene.add.image(x+TILE/2, y+TILE/2, 'orb')
+      .setDisplaySize(TILE-4, TILE-4).setAlpha(0.8).setDepth(3)
+    this.scene.tweens.add({ targets: img, alpha: 0.6, yoyo: true, repeat: -1, duration: 700 })
     return [img]
   }
 
