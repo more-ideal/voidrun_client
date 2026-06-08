@@ -4,8 +4,10 @@ import patternData from '../data/patterns.json'
 
 const PATTERN_HEIGHT = patternData.patterns[0].length
 const START_PATTERN = patternData.patterns[patternData.startIdx] as number[][]
-const BUFFER_AHEAD = 50   // 넉넉하게
+const BUFFER_AHEAD = 50
 const MAX_CLEAR_RUN = 6
+const CLEANUP_BEHIND = PATTERN_HEIGHT * 3  // 뒤쪽 정리 기준
+const ORB_CHANCE = 0.6                      // 오브 배치 확률
 
 type Row = number[]
 
@@ -89,7 +91,7 @@ export class MapGenerator {
   private baseRowGY = 0
 
   private startGfx: Phaser.GameObjects.Graphics | null = null
-  private rowGfx = new Map<number, Phaser.GameObjects.Graphics>()  // idx → gfx
+  private rowGfx = new Map<number, Phaser.GameObjects.Graphics>()
   private wallSet = new Set<string>()
   private tileTypeMap = new Map<string, number>()
   private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()
@@ -114,26 +116,18 @@ export class MapGenerator {
     const ahead = this.rows.length - 1 - playerRowIdx
     for (let i = ahead; i < BUFFER_AHEAD; i++) this.addRow()
 
-    // 오래된 타일 정리
+    const cutoff = playerGY + CLEANUP_BEHIND
     for (const [k, objs] of this.tileObjects) {
-      const gy = parseInt(k.split(',')[1])
-      if (gy > playerGY + PATTERN_HEIGHT + 5) {
+      if (parseInt(k.split(',')[1]) > cutoff) {
         objs.forEach(o => o.destroy())
-        this.tileObjects.delete(k)
-        this.tileTypeMap.delete(k)
-        this.walls.delete(k)
-        this.wallSet.delete(k)
+        this.tileObjects.delete(k); this.tileTypeMap.delete(k)
+        this.walls.delete(k); this.wallSet.delete(k)
       }
     }
     for (const [idx, gfx] of this.rowGfx) {
-      const gy = this.baseRowGY - idx
-      if (gy > playerGY + PATTERN_HEIGHT + 5) {
-        gfx.destroy(); this.rowGfx.delete(idx)
-      }
+      if (this.baseRowGY - idx > cutoff) { gfx.destroy(); this.rowGfx.delete(idx) }
     }
-    if (this.startGfx && this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
-      this.startGfx.destroy(); this.startGfx = null
-    }
+    if (this.startGfx && this.baseGY > cutoff) { this.startGfx.destroy(); this.startGfx = null }
   }
 
   getTileType(gx: number, gy: number): number {
@@ -143,8 +137,7 @@ export class MapGenerator {
   removeTile(gx: number, gy: number) {
     const k = `${gx},${gy}`
     this.tileObjects.get(k)?.forEach(o => o.destroy())
-    this.tileObjects.delete(k)
-    this.tileTypeMap.delete(k)
+    this.tileObjects.delete(k); this.tileTypeMap.delete(k)
     this.walls.delete(k); this.wallSet.delete(k)
   }
 
@@ -167,27 +160,21 @@ export class MapGenerator {
 
   private addRow() {
     const startC = this.openCols(this.rows[0])[0] ?? 7
-    const start = { r: 0, c: startC }
     let newRow: Row | null = null
     for (let attempt = 0; attempt < 80; attempt++) {
       const candidate = randomRow()
-      if (canReachTop([...this.rows, candidate], start)) { newRow = candidate; break }
+      if (canReachTop([...this.rows, candidate], { r: 0, c: startC })) { newRow = candidate; break }
     }
     if (!newRow) newRow = this.emptyWallRow()
 
     const newIdx = this.rows.length
     this.rows.push(newRow)
     this.addRowData(newIdx)
-
-    // 새 행 렌더링
     this.renderRow(newIdx)
-    // 바로 아래 행 재렌더링 (위쪽 경계선이 이제 정확해짐)
     if (newIdx > 0) this.rerenderRow(newIdx - 1)
-
     this.addSpecialTiles(newRow, this.baseRowGY - newIdx)
   }
 
-  // walls/wallSet에만 등록 (렌더링 없이)
   private addRowData(idx: number) {
     const gy = this.baseRowGY - idx
     const row = this.rows[idx]
@@ -200,7 +187,6 @@ export class MapGenerator {
     }
   }
 
-  // 렌더링
   private renderRow(idx: number) {
     const gy = this.baseRowGY - idx
     const row = this.rows[idx]
@@ -211,10 +197,8 @@ export class MapGenerator {
     }
   }
 
-  // 기존 행 재렌더링 (외곽선 갱신)
   private rerenderRow(idx: number) {
-    const gfx = this.rowGfx.get(idx)
-    if (!gfx) return
+    const gfx = this.rowGfx.get(idx); if (!gfx) return
     gfx.clear()
     const gy = this.baseRowGY - idx
     const row = this.rows[idx]
@@ -235,6 +219,7 @@ export class MapGenerator {
   private addSpecialTiles(row: Row, gy: number) {
     for (let c = 1; c < COLS-1; c++) {
       if (row[c] !== 0) continue
+      if (Math.random() > ORB_CHANCE) continue  // 60% 확률로 오브 배치
       const k = `${c},${gy}`
       this.tileTypeMap.set(k, 2)
       this.tileObjects.set(k, this.drawOrb(c*TILE, gy*TILE))
@@ -253,8 +238,7 @@ export class MapGenerator {
   }
 
   private drawWall(gfx: Phaser.GameObjects.Graphics, x: number, y: number, c: number, gy: number) {
-    gfx.fillStyle(0x0d2040, 1)
-    gfx.fillRect(x, y, TILE, TILE)
+    gfx.fillStyle(0x0d2040, 1); gfx.fillRect(x, y, TILE, TILE)
     gfx.lineStyle(1.5, 0x2a5080, 1)
     if (!this.wallSet.has(`${c},${gy-1}`)) { gfx.beginPath(); gfx.moveTo(x,y); gfx.lineTo(x+TILE,y); gfx.strokePath() }
     if (!this.wallSet.has(`${c},${gy+1}`)) { gfx.beginPath(); gfx.moveTo(x,y+TILE); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
