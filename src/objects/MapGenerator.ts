@@ -4,8 +4,7 @@ import patternData from '../data/patterns.json'
 
 const PATTERN_HEIGHT = patternData.patterns[0].length
 const START_PATTERN = patternData.patterns[patternData.startIdx] as number[][]
-const BUFFER_AHEAD = 30
-const MIN_LONG_GAP = 5
+const BUFFER_AHEAD = 50   // 넉넉하게
 const MAX_CLEAR_RUN = 6
 
 type Row = number[]
@@ -56,7 +55,6 @@ function canReachTop(rows: Row[], start: {r:number,c:number}): boolean {
   return nodes.every(({r,c})=>upOK.has(key(r,c)))
 }
 
-// 친구 로직: 랜덤 행 생성
 function randomRow(): Row {
   const row = new Array(COLS).fill(0)
   row[0] = 1; row[COLS-1] = 1
@@ -71,13 +69,11 @@ function randomRow(): Row {
       if (nc >= 1 && nc < COLS-1 && row[nc] === 0) { row[nc] = 1; placed++ }
     }
   }
-  // 연속 빈칸 제한
   let run = 0, runStart = -1
   const r = [...row]
   for (let c = 0; c < COLS; c++) {
     if (r[c] === 0) {
-      if (run === 0) runStart = c
-      run++
+      if (run === 0) runStart = c; run++
       if (run > MAX_CLEAR_RUN) {
         const mid = runStart + Math.floor(run/2)
         if (mid >= 1 && mid < COLS-1) { r[mid]=1; run=0; runStart=-1; c=mid }
@@ -92,11 +88,11 @@ export class MapGenerator {
   private rows: Row[] = []
   private baseRowGY = 0
 
-  private chunkGfx = new Map<number, Phaser.GameObjects.Graphics>()
+  private startGfx: Phaser.GameObjects.Graphics | null = null
+  private rowGfx = new Map<number, Phaser.GameObjects.Graphics>()  // idx → gfx
   private wallSet = new Set<string>()
   private tileTypeMap = new Map<string, number>()
   private tileObjects = new Map<string, Phaser.GameObjects.GameObject[]>()
-  private totalRowsGenerated = 0
 
   constructor(
     private scene: Phaser.Scene,
@@ -108,7 +104,8 @@ export class MapGenerator {
     this.placeStartPattern()
     this.baseRowGY = this.baseGY - PATTERN_HEIGHT - 1
     this.rows = [this.emptyWallRow()]
-    this.syncRow(0)
+    this.addRowData(0)
+    this.renderRow(0)
     for (let i = 0; i < BUFFER_AHEAD; i++) this.addRow()
   }
 
@@ -117,6 +114,7 @@ export class MapGenerator {
     const ahead = this.rows.length - 1 - playerRowIdx
     for (let i = ahead; i < BUFFER_AHEAD; i++) this.addRow()
 
+    // 오래된 타일 정리
     for (const [k, objs] of this.tileObjects) {
       const gy = parseInt(k.split(',')[1])
       if (gy > playerGY + PATTERN_HEIGHT + 5) {
@@ -127,10 +125,14 @@ export class MapGenerator {
         this.wallSet.delete(k)
       }
     }
-    for (const [idx, gfx] of this.chunkGfx) {
-      if (idx === 0 && this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
-        gfx.destroy(); this.chunkGfx.delete(idx)
+    for (const [idx, gfx] of this.rowGfx) {
+      const gy = this.baseRowGY - idx
+      if (gy > playerGY + PATTERN_HEIGHT + 5) {
+        gfx.destroy(); this.rowGfx.delete(idx)
       }
+    }
+    if (this.startGfx && this.baseGY > playerGY + PATTERN_HEIGHT + 5) {
+      this.startGfx.destroy(); this.startGfx = null
     }
   }
 
@@ -148,7 +150,7 @@ export class MapGenerator {
 
   private placeStartPattern() {
     const gfx = this.scene.add.graphics().setDepth(1)
-    this.chunkGfx.set(0, gfx)
+    this.startGfx = gfx
     for (let r = 0; r < PATTERN_HEIGHT; r++) {
       const gy = this.baseGY - r
       const row = START_PATTERN[r]
@@ -164,23 +166,61 @@ export class MapGenerator {
   }
 
   private addRow() {
-    const newGY = this.baseRowGY - this.rows.length
     const startC = this.openCols(this.rows[0])[0] ?? 7
     const start = { r: 0, c: startC }
-
     let newRow: Row | null = null
     for (let attempt = 0; attempt < 80; attempt++) {
       const candidate = randomRow()
-      if (canReachTop([...this.rows, candidate], start)) {
-        newRow = candidate; break
-      }
+      if (canReachTop([...this.rows, candidate], start)) { newRow = candidate; break }
     }
     if (!newRow) newRow = this.emptyWallRow()
 
+    const newIdx = this.rows.length
     this.rows.push(newRow)
-    this.totalRowsGenerated++
-    this.syncRow(this.rows.length - 1)
-    this.addSpecialTiles(newRow, newGY)
+    this.addRowData(newIdx)
+
+    // 새 행 렌더링
+    this.renderRow(newIdx)
+    // 바로 아래 행 재렌더링 (위쪽 경계선이 이제 정확해짐)
+    if (newIdx > 0) this.rerenderRow(newIdx - 1)
+
+    this.addSpecialTiles(newRow, this.baseRowGY - newIdx)
+  }
+
+  // walls/wallSet에만 등록 (렌더링 없이)
+  private addRowData(idx: number) {
+    const gy = this.baseRowGY - idx
+    const row = this.rows[idx]
+    this.walls.add(`-1,${gy}`); this.walls.add(`${COLS},${gy}`)
+    for (let c = 0; c < COLS; c++) {
+      if (!row[c]) continue
+      const k = `${c},${gy}`
+      this.tileTypeMap.set(k, 1)
+      this.walls.add(k); this.wallSet.add(k)
+    }
+  }
+
+  // 렌더링
+  private renderRow(idx: number) {
+    const gy = this.baseRowGY - idx
+    const row = this.rows[idx]
+    const gfx = this.scene.add.graphics().setDepth(1)
+    this.rowGfx.set(idx, gfx)
+    for (let c = 0; c < COLS; c++) {
+      if (row[c]) this.drawWall(gfx, c*TILE, gy*TILE, c, gy)
+    }
+  }
+
+  // 기존 행 재렌더링 (외곽선 갱신)
+  private rerenderRow(idx: number) {
+    const gfx = this.rowGfx.get(idx)
+    if (!gfx) return
+    gfx.clear()
+    const gy = this.baseRowGY - idx
+    const row = this.rows[idx]
+    for (let c = 0; c < COLS; c++) {
+      if (row[c]) this.drawWall(gfx, c*TILE, gy*TILE, c, gy)
+    }
   }
 
   private emptyWallRow(): Row {
@@ -201,27 +241,6 @@ export class MapGenerator {
     }
   }
 
-  private syncRow(idx: number) {
-    const gy = this.baseRowGY - idx
-    const row = this.rows[idx]
-    this.walls.add(`-1,${gy}`); this.walls.add(`${COLS},${gy}`)
-    const gfx = this.getAutoGfx()
-    for (let c = 0; c < COLS; c++) {
-      if (!row[c]) continue
-      const k = `${c},${gy}`
-      this.tileTypeMap.set(k, 1)
-      this.walls.add(k); this.wallSet.add(k)
-      this.drawWall(gfx, c*TILE, gy*TILE, c, gy)
-    }
-  }
-
-  private getAutoGfx(): Phaser.GameObjects.Graphics {
-    return this.chunkGfx.get(-1) ?? (() => {
-      const g = this.scene.add.graphics().setDepth(1)
-      this.chunkGfx.set(-1, g); return g
-    })()
-  }
-
   private drawTile(gfx: Phaser.GameObjects.Graphics, c: number, gy: number, type: number, pattern: number[][], r: number) {
     const x = c*TILE, y = gy*TILE
     switch (type) {
@@ -234,8 +253,9 @@ export class MapGenerator {
   }
 
   private drawWall(gfx: Phaser.GameObjects.Graphics, x: number, y: number, c: number, gy: number) {
-    gfx.fillStyle(0x0d2040,1); gfx.fillRect(x,y,TILE,TILE)
-    gfx.lineStyle(1.5,0x2a5080,1)
+    gfx.fillStyle(0x0d2040, 1)
+    gfx.fillRect(x, y, TILE, TILE)
+    gfx.lineStyle(1.5, 0x2a5080, 1)
     if (!this.wallSet.has(`${c},${gy-1}`)) { gfx.beginPath(); gfx.moveTo(x,y); gfx.lineTo(x+TILE,y); gfx.strokePath() }
     if (!this.wallSet.has(`${c},${gy+1}`)) { gfx.beginPath(); gfx.moveTo(x,y+TILE); gfx.lineTo(x+TILE,y+TILE); gfx.strokePath() }
     if (!this.wallSet.has(`${c-1},${gy}`)) { gfx.beginPath(); gfx.moveTo(x,y); gfx.lineTo(x,y+TILE); gfx.strokePath() }
@@ -253,11 +273,9 @@ export class MapGenerator {
   private drawLaser(gfx: Phaser.GameObjects.Graphics, x: number, y: number, c: number, row: number[]) {
     const cx=x+TILE/2, cy=y+TILE/2, s=TILE*0.3
     gfx.fillStyle(0xff2255,1)
-    gfx.fillTriangle(cx,cy-s,cx+s,cy,cx,cy+s)
-    gfx.fillTriangle(cx,cy-s,cx-s,cy,cx,cy+s)
+    gfx.fillTriangle(cx,cy-s,cx+s,cy,cx,cy+s); gfx.fillTriangle(cx,cy-s,cx-s,cy,cx,cy+s)
     gfx.lineStyle(1,0xff6680,1)
-    gfx.strokeTriangle(cx,cy-s,cx+s,cy,cx,cy+s)
-    gfx.strokeTriangle(cx,cy-s,cx-s,cy,cx,cy+s)
+    gfx.strokeTriangle(cx,cy-s,cx+s,cy,cx,cy+s); gfx.strokeTriangle(cx,cy-s,cx-s,cy,cx,cy+s)
     if (c+1<COLS && row[c+1]===3) { gfx.lineStyle(2,0xff2255,0.7); gfx.lineBetween(x+TILE,cy,x+TILE*2,cy) }
   }
 
@@ -273,9 +291,8 @@ export class MapGenerator {
   private drawConveyor(x: number, y: number, type: number): Phaser.GameObjects.GameObject[] {
     const keys: Record<number,string> = {5:'up',6:'down',7:'left',8:'right'}
     const key = keys[type]
-    if (key && this.scene.textures.exists(key)) {
+    if (key && this.scene.textures.exists(key))
       return [this.scene.add.image(x+TILE/2,y+TILE/2,key).setDisplaySize(TILE,TILE).setDepth(2)]
-    }
     const gfx=this.scene.add.graphics().setDepth(1)
     gfx.fillStyle(0x112233,1); gfx.fillRect(x,y,TILE,TILE)
     gfx.lineStyle(1,0x00e5cc,0.5); gfx.strokeRect(x,y,TILE,TILE)
